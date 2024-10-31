@@ -74,8 +74,8 @@ void loop() {
               bp.println(F("Connection: close"));
               bp.print(F("Content-Length: "));
               bp.println(dataFile.size());
-              bp.print(F("Content-Type: text/plain"));
-              bp.println(F("Content-Disposition: attachment; filename: \"test.txt\""));
+              bp.println(F("Content-Type: text/plain"));
+              bp.println(F("Content-Disposition: attachment; filename=\"test.csv\""));
               bp.println();
               uint16_t c = 0;
               while (dataFile.available()) {
