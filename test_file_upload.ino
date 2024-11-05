@@ -15,7 +15,7 @@ void setup() {
   if(!SPIFFS.begin(true)){
   Serial.println("Error mounting SPIFFS");
   } else {
-    write_file();
+    begin_file();
   }
 
   // Connect to Wi-Fi network with SSID and password
@@ -28,9 +28,11 @@ void setup() {
   Serial.println(IP);
 
   server.begin();
+  
 }
 
 void loop() {
+  fake_measurement();
    WiFiClient client = server.available();   // Listen for incoming clients
 
   if (client) {                             // If a new client connects,
@@ -57,15 +59,9 @@ void loop() {
             Serial.println("is the request");
             if (request.indexOf("GET /download") >= 0) {
               Serial.println("Download Requested");
-              File dataFile = SPIFFS.open("/test.csv", FILE_READ);
+              File dataFile = SPIFFS.open("/data.csv", FILE_READ);
               int filesize = dataFile.size();
-              // Serial.println("Content-Length:"+String(filesize));
-              // client.println("HTTP/1.1 200 OK");
-              // client.println("Content-Type: text/plain");
-              // client.println("Content-Length:"+String(filesize));
-              // client.println("Connection: close");
-              // client.println();
-              // client.write(dataFile);
+
 
               char buff[1024];
 
@@ -75,7 +71,7 @@ void loop() {
               bp.print(F("Content-Length: "));
               bp.println(dataFile.size());
               bp.println(F("Content-Type: text/plain"));
-              bp.println(F("Content-Disposition: attachment; filename=\"test.csv\""));
+              bp.println(F("Content-Disposition: attachment; filename=\"data.csv\""));
               bp.println();
               uint16_t c = 0;
               while (dataFile.available()) {
@@ -83,19 +79,7 @@ void loop() {
               }
               dataFile.close();
               bp.flush();
-              // uint8_t buf[256];
-              // while (dataFile.available())
-              // {
-              //   int n = dataFile.read(buf, sizeof(buf));
-              //   for (int i = 0; i < n; i++)
-              //   {
-              //     Serial.print(buf[i]);
-              //     Serial.println('end');
-              //     client.print(buf[i]);
-              //     //res->write(buf[i]);
-              //   }
-              // }
-              //dataFile.close();
+
                client.println();
              // output = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><script type=\"text/javascript\" src=\"jzip.js\"></script><script>var filelist = [";
             } else { client.println("HTTP/1.1 200 OK");
@@ -123,34 +107,54 @@ void loop() {
     client.stop();
     Serial.println("Client disconnected.");
     Serial.println("");
-  }
+  } 
   // delay(5000);
   // Serial.println(1);
 }
 
-void write_file(){
-    file = SPIFFS.open("/test.csv", FILE_WRITE);
+void fake_measurement(){
+  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15";
+  append_data_to_file(fake_data);
+}
+
+void append_data_to_file(String data_string){
+    file = SPIFFS.open("/data.csv", FILE_APPEND);
+  if(!file){
+    Serial.println("Error opening the file in APPEND mode");
+    return;
+  }
+  else
+  {
+    Serial.println("File successfully opened in APPEND mode");
+  }
+
+  if(file.println(data_string))  // Add new row to data file
+  {
+    Serial.println("Data added to file");
+  }
+
+  file.close();
+
+}
+
+void begin_file(){
+    file = SPIFFS.open("/data.csv", FILE_WRITE);
   if(!file){
     Serial.println("Error opening the file in WRITE mode");
     return;
   }
   else
   {
-    Serial.println("Open file success");
+    Serial.println("File successfully opened in WRITE mode");
   }
 
-  String testline1= "a, b, c, d, e, f, g";
-  String testline2 = "1, 2, 3, 4, 5, 6, 7";
+  String dataFields = "SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
 
-  if(file.println(testline1))
+  if(file.println(dataFields))  // Write column labels to csv file
   {
-    Serial.println("Line 1 written");
-  }
-
-  if(file.println(testline2))
-  {
-    Serial.println("Line 2 Written");
+    Serial.println("Data fields written to file");
   }
 
   file.close();
+
 }
