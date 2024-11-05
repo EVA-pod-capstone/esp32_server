@@ -2,21 +2,29 @@
 #include <WiFi.h>
 #include <StreamLib.h>
 
-// Replace with your network credentials
+// Set ESP32 wifi server credentials
 const char* ssid = "ESP32-Access-Point";
 const char* password = "123456789";
+
+// input button pin
+int button = 0;
 
 // Set web server port number to 80
 WiFiServer server(80);
 File file;
 
 void setup() {
+
   Serial.begin(115200);
   if(!SPIFFS.begin(true)){
   Serial.println("Error mounting SPIFFS");
   } else {
     begin_file();
   }
+
+  pinMode(button, INPUT_PULLUP);
+  digitalWrite(button, HIGH);  
+  attachInterrupt(digitalPinToInterrupt(button), isr, RISING);
 
   // Connect to Wi-Fi network with SSID and password
   Serial.print("Setting AP (Access Point)…");
@@ -32,6 +40,7 @@ void setup() {
 }
 
 void loop() {
+  delay(5000);
   fake_measurement();
    WiFiClient client = server.available();   // Listen for incoming clients
 
@@ -123,8 +132,15 @@ void loop() {
   // Serial.println(1);
 }
 
+
+void isr() // if wifi on, turn off. if wifi off, turn on
+{
+       Serial.println(50);  
+
+}
+
 void fake_measurement(){
-  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15";
+  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
   append_data_to_file(fake_data);
 }
 
