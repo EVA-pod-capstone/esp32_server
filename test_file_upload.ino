@@ -82,14 +82,25 @@ void loop() {
 
                client.println();
              // output = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><script type=\"text/javascript\" src=\"jzip.js\"></script><script>var filelist = [";
-            } else { client.println("HTTP/1.1 200 OK");
+            } else if (request.indexOf("GET /delete") >= 0) {
+              begin_file();
+              client.println("HTTP/1.1 200 OK");
             client.println("Content-type:text/html");
             client.println("Connection: close");
             client.println();
 
             // Send your "Hello World" HTML response
             client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
-            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a></p></body></html>");
+            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body><p>Data deleted</p></html>");
+            //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
+              } else { client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // Send your "Hello World" HTML response
+            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
             //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
 }
             // Break out of the while loop
