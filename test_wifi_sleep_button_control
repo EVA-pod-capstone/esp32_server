@@ -1,0 +1,213 @@
+/*  
+  This script allows the button on GPIO pin 15 to turn on and off the wifi server. When wifi is off, the esp32 goes into deep sleep mode.
+  When on, user can connect to the wifi and navigate to the access point ip address, where they can download test csv or delete data. 
+  Each time it wakes up from sleep it will also append a line of fake measurement data to the csv file stored in SPIFFS (flash).
+*/
+#include <SPIFFS.h>
+#include <WiFi.h>
+#include <StreamLib.h>
+#include "driver/rtc_io.h"
+
+#define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
+#define WAKEUP_GPIO_15              GPIO_NUM_15     // Only RTC IO are allowed - ESP32 Pin example
+
+// Define bitmask for all GPIOs
+uint64_t bitmask = BUTTON_PIN_BITMASK(WAKEUP_GPIO_15);
+
+RTC_DATA_ATTR int bootCount = 0;
+
+// Set web server port number to 80
+RTC_DATA_ATTR WiFiServer server(80);
+RTC_DATA_ATTR File file;
+
+void setup() {
+  Serial.begin(115200);
+  if(!SPIFFS.begin(true)){
+  Serial.println("Error mounting SPIFFS");
+  } else if (!SPIFFS.exists("/data.csv")){
+    begin_file();
+  } else {
+    fake_measurement();
+  }
+
+  delay(1000);  //Take some time to open up the Serial Monitor
+  attachInterrupt(digitalPinToInterrupt(WAKEUP_GPIO_15), isr, FALLING);
+  // Connect to Wi-Fi network with SSID and password
+  Serial.print("Setting AP (Access Point)…");
+  // Remove the password parameter, if you want the AP (Access Point) to be open
+  // Set ESP32 wifi server credentials
+  char* ssid = "ESP32-Access-Point";
+  char* password = "123456789";
+  WiFi.softAP(ssid, password);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
+  server.begin();
+  wifiserver();
+
+  // //Go to sleep now
+  // Serial.println("Going to sleep now");
+  // esp_deep_sleep_start();
+  // Serial.println("This will never be printed");
+}
+
+void wifiserver() {
+  while(1){
+   WiFiClient client = server.available();   // Listen for incoming clients
+
+  if (client) {                             // If a new client connects,
+    Serial.println("New Client.");          // print a message out in the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    String request = "";
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        currentLine += c;
+        request += c;
+        if (c == '\n') {                    // if the byte is a newline character
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 2) {
+            Serial.println("Received request");
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+           
+            // The HTTP response ends with another blank line
+            client.println();
+            Serial.print(request);
+            Serial.println("is the request");
+            if (request.indexOf("GET /download") >= 0) {
+              Serial.println("Download Requested");
+              File dataFile = SPIFFS.open("/data.csv", FILE_READ);
+              int filesize = dataFile.size();
+
+
+              char buff[1024];
+
+              ChunkedPrint bp(client, buff, sizeof(buff));
+              bp.println(F("HTTP/1.1 200 OK"));
+              bp.println(F("Connection: close"));
+              bp.print(F("Content-Length: "));
+              bp.println(dataFile.size());
+              bp.println(F("Content-Type: text/plain"));
+              bp.println(F("Content-Disposition: attachment; filename=\"data.csv\""));
+              bp.println();
+              uint16_t c = 0;
+              while (dataFile.available()) {
+                bp.write(dataFile.read());
+              }
+              dataFile.close();
+              bp.flush();
+
+               client.println();
+             // output = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><script type=\"text/javascript\" src=\"jzip.js\"></script><script>var filelist = [";
+            } else if (request.indexOf("GET /delete") >= 0) {
+              begin_file();
+              client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // Send your "Hello World" HTML response
+            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body><p>Data deleted</p></html>");
+            //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
+              } else { client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // Send your "Hello World" HTML response
+            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
+            //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
+}
+            // Break out of the while loop
+            request = "";
+            break;
+          } else { // if you got a newline, then clear currentLine
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // Close the connection
+    client.stop();
+    Serial.println("Client disconnected.");
+    Serial.println("");
+  } 
+  }
+  // delay(5000);
+  // Serial.println(1);
+}
+
+void isr(){
+  //Go to sleep now
+    //Use ext1 as a wake-up source
+  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
+  // enable pull-down resistors and disable pull-up resistors
+  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
+  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
+  
+  Serial.println("Going to sleep now");
+  esp_deep_sleep_start();
+  Serial.println("This will never be printed");
+}
+
+
+void fake_measurement(){
+  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  append_data_to_file(fake_data);
+}
+
+void append_data_to_file(String data_string){
+    file = SPIFFS.open("/data.csv", FILE_APPEND);
+  if(!file){
+    Serial.println("Error opening the file in APPEND mode");
+    return;
+  }
+  else
+  {
+    Serial.println("File successfully opened in APPEND mode");
+  }
+
+  if(file.println(data_string))  // Add new row to data file
+  {
+    Serial.println("Data added to file");
+  }
+
+  file.close();
+
+}
+
+void begin_file(){
+    file = SPIFFS.open("/data.csv", FILE_WRITE);
+  if(!file){
+    Serial.println("Error opening the file in WRITE mode");
+    return;
+  }
+  else
+  {
+    Serial.println("File successfully opened in WRITE mode");
+  }
+
+  String dataFields = "SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
+
+  if(file.println(dataFields))  // Write column labels to csv file
+  {
+    Serial.println("Data fields written to file");
+  }
+
+  file.close();
+
+}
+
+
+void loop() {
+  //This is not going to be called
+}
