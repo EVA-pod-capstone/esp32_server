@@ -3,10 +3,12 @@
   When on, user can connect to the wifi and navigate to the access point ip address, where they can download test csv or delete data. 
   Each time it wakes up from sleep it will also append a line of fake measurement data to the csv file stored in SPIFFS (flash).
 */
+
 #include <SPIFFS.h>
 #include <WiFi.h>
 #include <StreamLib.h>
 #include "driver/rtc_io.h"
+#include "esp_wifi.h"
 
 #define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
 #define WAKEUP_GPIO_15              GPIO_NUM_15     // Only RTC IO are allowed - ESP32 Pin example
@@ -15,6 +17,7 @@
 uint64_t bitmask = BUTTON_PIN_BITMASK(WAKEUP_GPIO_15);
 
 RTC_DATA_ATTR int bootCount = 0;
+RTC_DATA_ATTR int button_pressed = 0;
 
 // Set web server port number to 80
 RTC_DATA_ATTR WiFiServer server(80);
@@ -22,39 +25,72 @@ RTC_DATA_ATTR File file;
 
 void setup() {
   Serial.begin(115200);
+
+  // Initialize Flash File System and create file if it does not exist
   if(!SPIFFS.begin(true)){
   Serial.println("Error mounting SPIFFS");
   } else if (!SPIFFS.exists("/data.csv")){
+      Serial.println("Creating csv data file");
     begin_file();
   } else {
-    fake_measurement();
+      Serial.println("Found existing data file");
   }
 
-  delay(1000);  //Take some time to open up the Serial Monitor
-  attachInterrupt(digitalPinToInterrupt(WAKEUP_GPIO_15), isr, FALLING);
-  // Connect to Wi-Fi network with SSID and password
-  Serial.print("Setting AP (Access Point)…");
-  // Remove the password parameter, if you want the AP (Access Point) to be open
-  // Set ESP32 wifi server credentials
-  char* ssid = "ESP32-Access-Point";
-  char* password = "123456789";
-  WiFi.softAP(ssid, password);
+  // Configure wakeup sources for next sleep cycle
+  uint64_t measurement_time = 1*60*1000000;
+  esp_sleep_enable_timer_wakeup(measurement_time);
+    //Use ext1 as a wake-up source
+  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
+  // enable pull-down resistors and disable pull-up resistors
+  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
+  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
 
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+  // Figure out what caused wakeup
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause();
 
-  server.begin();
-  wifiserver();
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT1: // Wakeup by user button -> host wifi server
+    {
+        attachInterrupt(digitalPinToInterrupt(WAKEUP_GPIO_15), isr, FALLING); // Attach interrupt to user button
 
-  // //Go to sleep now
-  // Serial.println("Going to sleep now");
-  // esp_deep_sleep_start();
-  // Serial.println("This will never be printed");
+        Serial.println("Wakeup caused by user button");
+       
+        Serial.print("Setting AP (Access Point)…");
+        // Remove the password parameter, if you want the AP (Access Point) to be open
+        // Set ESP32 wifi server credentials
+        char* ssid = "ESP32-Access-Point";
+        char* password = "123456789";
+        WiFi.softAP(ssid, password);
+
+        // Print IP address where user can make data request
+        IPAddress IP = WiFi.softAPIP();
+        Serial.print("AP IP address: ");
+        Serial.println(IP);
+
+        server.begin();
+        wifiserver();
+  }
+        break;
+    case ESP_SLEEP_WAKEUP_TIMER: // Wakeup by timer -> take measurement
+       Serial.println("Wakeup caused by RTC timer");
+       fake_measurement();
+       //upload_to_thingspeak();
+       go_to_sleep();
+       break;
+    default : Serial.printf("Wakeup caused by unexpected source",wakeup_reason); go_to_sleep(); break;
+  }
 }
+
 
 void wifiserver() {
   while(1){
+    if (button_pressed){
+      button_pressed = 0;
+      Serial.println("Going to sleep");
+      go_to_sleep();
+    }
    WiFiClient client = server.available();   // Listen for incoming clients
 
   if (client) {                             // If a new client connects,
@@ -147,16 +183,13 @@ void wifiserver() {
 }
 
 void isr(){
-  //Go to sleep now
-    //Use ext1 as a wake-up source
-  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
-  // enable pull-down resistors and disable pull-up resistors
-  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
-  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
-  
-  Serial.println("Going to sleep now");
-  esp_deep_sleep_start();
-  Serial.println("This will never be printed");
+  button_pressed++;
+}
+
+void go_to_sleep(){  
+ // Serial.println("Going to sleep now");
+  esp_wifi_stop(); // Turn off wifi
+  esp_deep_sleep_start(); // Sleep
 }
 
 
@@ -170,9 +203,7 @@ void append_data_to_file(String data_string){
   if(!file){
     Serial.println("Error opening the file in APPEND mode");
     return;
-  }
-  else
-  {
+  } else {
     Serial.println("File successfully opened in APPEND mode");
   }
 
@@ -180,9 +211,7 @@ void append_data_to_file(String data_string){
   {
     Serial.println("Data added to file");
   }
-
   file.close();
-
 }
 
 void begin_file(){
@@ -190,9 +219,7 @@ void begin_file(){
   if(!file){
     Serial.println("Error opening the file in WRITE mode");
     return;
-  }
-  else
-  {
+  } else {
     Serial.println("File successfully opened in WRITE mode");
   }
 
@@ -202,9 +229,7 @@ void begin_file(){
   {
     Serial.println("Data fields written to file");
   }
-
   file.close();
-
 }
 
 
