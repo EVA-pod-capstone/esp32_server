@@ -114,7 +114,56 @@ void setup() {
   // Initialize program Serial port at 115200 baud rate
   
   Serial.begin(115200);
-  WiFi.mode(WIFI_STA);    
+  delay(1000);
+  
+  if(!SPIFFS.begin(true)){
+  Serial.println("Error mounting SPIFFS");
+  } else if (!SPIFFS.exists("/data.csv")){
+      Serial.println("Creating csv data file");
+    begin_file();
+  } else {
+      Serial.println("Found existing data file");
+  }
+  // Configure wakeup sources for next sleep cycle
+  uint64_t measurement_time = 1*60*1000000;
+  esp_sleep_enable_timer_wakeup(measurement_time);
+    //Use ext1 as a wake-up source
+  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
+  // enable pull-down resistors and disable pull-up resistors
+  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
+  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
+
+  // Figure out what caused wakeup
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT1: // Wakeup by user button -> host wifi server
+    {
+        attachInterrupt(digitalPinToInterrupt(WAKEUP_GPIO_15), isr, FALLING); // Attach interrupt to user button
+
+        Serial.println("Wakeup caused by user button");
+       
+        Serial.print("Setting AP (Access Point)…");
+        // Remove the password parameter, if you want the AP (Access Point) to be open
+        // Set ESP32 wifi server credentials
+        char* ssid = "ESP32-Access-Point";
+        char* password = "123456789";
+        WiFi.softAP(ssid, password);
+
+        // Print IP address where user can make data request
+        IPAddress IP = WiFi.softAPIP();
+        Serial.print("AP IP address: ");
+        Serial.println(IP);
+
+        server.begin();
+        wifiserver();
+  }
+        break;
+    case ESP_SLEEP_WAKEUP_TIMER: // Wakeup by timer -> take measurement
+      {
+        WiFi.mode(WIFI_STA);    
   ThingSpeak.begin(client);  // Initialize ThingSpeak
   //intialize Light Sensor
   Wire.begin();
@@ -171,58 +220,8 @@ void setup() {
   // Start the Modbus serial Port, for Soil_sensor
   Serial1.begin(4800, SERIAL_8N1, 17, 18);
   // Start the Modbus serial Port, for Soil_sensor
-
-
   delay(1000);
 
-  
-  if(!SPIFFS.begin(true)){
-  Serial.println("Error mounting SPIFFS");
-  } else if (!SPIFFS.exists("/data.csv")){
-      Serial.println("Creating csv data file");
-    begin_file();
-  } else {
-      Serial.println("Found existing data file");
-  }
-  // Configure wakeup sources for next sleep cycle
-  uint64_t measurement_time = 1*60*1000000;
-  esp_sleep_enable_timer_wakeup(measurement_time);
-    //Use ext1 as a wake-up source
-  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
-  // enable pull-down resistors and disable pull-up resistors
-  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
-  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
-
-  // Figure out what caused wakeup
-  esp_sleep_wakeup_cause_t wakeup_reason;
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  switch(wakeup_reason)
-  {
-    case ESP_SLEEP_WAKEUP_EXT1: // Wakeup by user button -> host wifi server
-    {
-        attachInterrupt(digitalPinToInterrupt(WAKEUP_GPIO_15), isr, FALLING); // Attach interrupt to user button
-
-        Serial.println("Wakeup caused by user button");
-       
-        Serial.print("Setting AP (Access Point)…");
-        // Remove the password parameter, if you want the AP (Access Point) to be open
-        // Set ESP32 wifi server credentials
-        char* ssid = "ESP32-Access-Point";
-        char* password = "123456789";
-        WiFi.softAP(ssid, password);
-
-        // Print IP address where user can make data request
-        IPAddress IP = WiFi.softAPIP();
-        Serial.print("AP IP address: ");
-        Serial.println(IP);
-
-        server.begin();
-        wifiserver();
-  }
-        break;
-    case ESP_SLEEP_WAKEUP_TIMER: // Wakeup by timer -> take measurement
-      
       while (!Serial) delay(10);    
        Serial.println("Wakeup caused by RTC timer");
        fake_measurement();
@@ -230,13 +229,11 @@ void setup() {
        takeSoilMeasure();
        upload_to_thingspeak();
        go_to_sleep();
+      }
        break;
     default : Serial.printf("Wakeup caused by unexpected source",wakeup_reason); go_to_sleep(); break;
   }
 
-  delay(1000);  //Take some time to open up the Serial Monitor
-  
-  
 
 }
 
@@ -441,30 +438,7 @@ void begin_file(){
 
 }
 
-void fake_measurement(){
-  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
-  append_data_to_file(fake_data);
-}
 
-void append_data_to_file(String data_string){
-    file = SPIFFS.open("/data.csv", FILE_APPEND);
-  if(!file){
-    Serial.println("Error opening the file in APPEND mode");
-    return;
-  }
-  else
-  {
-    Serial.println("File successfully opened in APPEND mode");
-  }
-
-  if(file.println(data_string))  // Add new row to data file
-  {
-    Serial.println("Data added to file");
-  }
-
-  file.close();
-
-}
 void isr(){
   //Go to sleep now
     //Use ext1 as a wake-up source
@@ -575,6 +549,25 @@ void go_to_sleep(){
  // Serial.println("Going to sleep now");
   esp_wifi_stop(); // Turn off wifi
   esp_deep_sleep_start(); // Sleep
+}
+
+void fake_measurement(){
+  // order is "SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light"
+  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  append_data_to_file(fake_data);
+}
+
+void append_data_to_file(){
+    file = SPIFFS.open("/data.csv", FILE_APPEND);
+  if(!file){
+    Serial.println("Error opening the file in APPEND mode");
+    return;
+  } else {
+    Serial.println("File successfully opened in APPEND mode");
+  }
+
+  file.print(humiditysoil);
+  file.close();
 }
 
 void upload_to_thingspeak(){
