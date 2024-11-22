@@ -1,0 +1,621 @@
+/*
+  Note: 
+  *Serial Port 0 is not used to connect the RS485 Converter (MAX485) because its used for debugging. 
+  *The Serial Port 1 (TX1, RX1) is used for ModBus communication interface.
+  *Wiring of Sensor, Arduino, and MAX485 TTL to RS485 Converter:
+  ___________________________________________________________________________________________
+  | Sensor (SHT20)   |   MAX485 TTL to RS485 Converter
+  |  A (Yellow)      |        A (Terminal block)
+  |  B (White)       |        B (Terminal block)
+  |  GND (Black)     |       GND (External Supply)
+  |  Vs (Red)        |      5-30V (External Supply)
+  ___________________________________________________________________________________________
+  | MAX485 TTL to RS485 Converter  |  Arduino (Hardware Serial)  |  Arduino (Software Serial)
+  |     RO (Reciever Output)       |        D19 (RX1)            |          D9 (RX)
+  |     RE (Reciever Enable)       |        D2                   |          D2
+  |     DE (Driver Enable)         |        D3                   |          D3
+  |     DI (Driver Input)          |        D18 (TX1)            |          D10 (TX)
+  ___________________________________________________________________________________________
+*/
+
+//includes for sensors
+#include <SoftwareSerial.h>
+#include <SPIFFS.h>
+#include <Adafruit_SCD30.h>
+#include <WiFi.h>
+#include "ThingSpeak.h"
+#include <Wire.h>
+#include "SparkFun_VEML6030_Ambient_Light_Sensor.h"
+#include <SPI.h>
+#include <Adafruit_Sensor.h>
+#include "Adafruit_BME680.h"
+#include "Adafruit_PM25AQI.h"
+#include <Adafruit_INA219.h>
+#include <StreamLib.h>
+#include "driver/rtc_io.h"
+#include "esp_wifi.h"
+
+// Define the pins used by the RS-485 module
+#define MAX485_RE_NEG 2
+#define MAX485_DE 40
+//define pin for serial writing
+
+//DefineI2C integration
+#define BME_SCK 13
+#define BME_MISO 12
+#define BME_MOSI 11
+#define BME_CS 10
+#define AL_ADDR 0x10
+//constant definition
+#define SEALEVELPRESSURE_HPA (1013.25)
+#define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
+#define WAKEUP_GPIO_15              GPIO_NUM_15     // Only RTC IO are allowed - ESP32 Pin example
+
+// Define bitmask for all GPIOs
+uint64_t bitmask = BUTTON_PIN_BITMASK(WAKEUP_GPIO_15);
+
+RTC_DATA_ATTR int bootCount = 0;
+
+// Set web server port number to 80
+RTC_DATA_ATTR WiFiServer server(80);
+RTC_DATA_ATTR File file;
+//VEML/BMEIntegration
+SparkFun_Ambient_Light light(AL_ADDR);
+Adafruit_BME680 bme(&Wire);
+
+Adafruit_INA219 ina219;
+
+
+WiFiClient  client;
+const char* ssid = "CapstoneWifi2";   // your network SSID (name) 
+const char* password = "RuleNumber9";   // your network password
+unsigned long channel1 = 2729341;
+const char * api_key1 = "S5QQWWGH4ZECG7CX";
+// Channel 1 fields are SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity
+
+unsigned long channel2 = 2729343;
+const char * api_key2 = "ZFLNCDNHYNUI28OX";
+// Channel 2 fields are TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light
+
+//light variable
+float gain = .125;
+int timeselect = 100;
+long luxVal = 0; 
+//variablesforothersensors
+float current_mA = 0;
+float shuntvoltage=0;
+float busvoltage=0;
+float humidityAir = 0;
+float temperature_f_air = 0;
+float light_lux = 0;
+float air_pressure_alt_ft = 0;
+float co2_ppm = 0;//////////still using wrong sensor
+float voltage_v=0;
+//soil variables
+float humiditysoil=0;
+float temperaturesoil=0;
+uint16_t conductivity=0;
+float pH=0;
+int Nitrogen=0;
+int Phosphorus=0;
+int Potassium=0;
+uint16_t Salinity=0;
+uint16_t TDS=0;
+float temperatureAir=0;
+//measurecounts
+float VEMLMeasureCount=0;
+float voltageMeasureCount=0;
+float currentMeasureCount=0;
+float BMEMeasureCount=0;
+float SoilMeasureCount=0;
+
+RTC_DATA_ATTR int button_pressed = 0;
+void setup() {
+  // Initialize program Serial port at 115200 baud rate
+  
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);    
+  ThingSpeak.begin(client);  // Initialize ThingSpeak
+  //intialize Light Sensor
+  Wire.begin();
+  if(light.begin())
+    Serial.println("Ready to sense some light!"); 
+  else
+    Serial.println("Could not communicate with the sensor!");
+  light.setGain(gain);
+  light.setIntegTime(timeselect);
+  Serial.println("Reading settings..."); 
+  Serial.print("Gain: ");
+  float gainVal = light.readGain();
+  Serial.print(gainVal, 3); 
+  Serial.print(" Integration Time: ");
+  int timeVal = light.readIntegTime();
+  Serial.println(timeVal);
+  //initialize Light Sensor
+
+  //initialize current sensorI2C
+  if (! ina219.begin()) {
+    Serial.println("Failed to find INA219 chip");
+    while (1) { delay(10); }
+  }
+  //initialize current sensorI2C
+
+
+  //initialize BMEI2C
+  if (!bme.begin()) {
+    Serial.println("Could not find a valid BME680 sensor, check wiring!");
+    while (1);
+  }
+  bme.setTemperatureOversampling(BME680_OS_8X);
+  bme.setHumidityOversampling(BME680_OS_2X);
+  bme.setPressureOversampling(BME680_OS_4X);
+  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+  bme.setGasHeater(320, 150); // 320*C for 150 ms
+  //initialize BMEI2C
+
+
+  //initialize wifi/thingspeak
+  // WiFi.mode(WIFI_STA);    
+  // ThingSpeak.begin(client);  // Initialize ThingSpeak
+  // while (!Serial) delay(10);
+  //initialize wifi/thingspeak
+
+
+  // Initialize modbus Serial port at 4800 baud rate
+  pinMode(MAX485_RE_NEG, OUTPUT);
+  pinMode(MAX485_DE, OUTPUT);
+  digitalWrite(MAX485_RE_NEG, 0);
+  digitalWrite(MAX485_DE, 0);
+  // Initialize modbus Serial port at 4800 baud rate
+ 
+  // Start the Modbus serial Port, for Soil_sensor
+  Serial1.begin(4800, SERIAL_8N1, 17, 18);
+  // Start the Modbus serial Port, for Soil_sensor
+
+
+  delay(1000);
+
+  
+  if(!SPIFFS.begin(true)){
+  Serial.println("Error mounting SPIFFS");
+  } else if (!SPIFFS.exists("/data.csv")){
+      Serial.println("Creating csv data file");
+    begin_file();
+  } else {
+      Serial.println("Found existing data file");
+  }
+  // Configure wakeup sources for next sleep cycle
+  uint64_t measurement_time = 1*60*1000000;
+  esp_sleep_enable_timer_wakeup(measurement_time);
+    //Use ext1 as a wake-up source
+  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
+  // enable pull-down resistors and disable pull-up resistors
+  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
+  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
+
+  // Figure out what caused wakeup
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT1: // Wakeup by user button -> host wifi server
+    {
+        attachInterrupt(digitalPinToInterrupt(WAKEUP_GPIO_15), isr, FALLING); // Attach interrupt to user button
+
+        Serial.println("Wakeup caused by user button");
+       
+        Serial.print("Setting AP (Access Point)…");
+        // Remove the password parameter, if you want the AP (Access Point) to be open
+        // Set ESP32 wifi server credentials
+        char* ssid = "ESP32-Access-Point";
+        char* password = "123456789";
+        WiFi.softAP(ssid, password);
+
+        // Print IP address where user can make data request
+        IPAddress IP = WiFi.softAPIP();
+        Serial.print("AP IP address: ");
+        Serial.println(IP);
+
+        server.begin();
+        wifiserver();
+  }
+        break;
+    case ESP_SLEEP_WAKEUP_TIMER: // Wakeup by timer -> take measurement
+      
+      while (!Serial) delay(10);    
+       Serial.println("Wakeup caused by RTC timer");
+       fake_measurement();
+       takeI2CMeasurements();
+       takeSoilMeasure();
+       upload_to_thingspeak();
+       go_to_sleep();
+       break;
+    default : Serial.printf("Wakeup caused by unexpected source",wakeup_reason); go_to_sleep(); break;
+  }
+
+  delay(1000);  //Take some time to open up the Serial Monitor
+  
+  
+
+}
+
+
+void loop() {    
+} 
+
+
+//structure of data: SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDisolvedSolids, AirHum, Airpress, Airtemp, Co2, light
+void preTransmission() {
+  digitalWrite(MAX485_RE_NEG, HIGH);
+  digitalWrite(MAX485_DE, HIGH);
+}
+
+void postTransmission() {
+  digitalWrite(MAX485_RE_NEG, LOW);
+  digitalWrite(MAX485_DE, LOW);
+}
+
+void takeSoilMeasure(){
+  delay(2000);
+  preTransmission();
+  byte soil_humidity_request[] = { 0x01, 0x03, 0x00, 0x00, 0x00, 0x01, 0x84, 0x0A };
+  Serial1.write(soil_humidity_request, sizeof(soil_humidity_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_humidity_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_humidity_buff, 16);
+  humiditysoil = word(soil_humidity_buff[3], soil_humidity_buff[4]);
+  humiditysoil = humiditysoil / 10.0;
+  delay(2000);
+  // Read Soil Temperature
+  preTransmission();
+  byte soil_temperature_request[] = { 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0xd5, 0xca };
+  Serial1.write(soil_temperature_request, sizeof(soil_temperature_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_temperature_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_temperature_buff, 16);
+  temperaturesoil = word(soil_temperature_buff[3], soil_temperature_buff[4]);
+  temperaturesoil = temperaturesoil / 10.0;
+  delay(2000);
+  // Read Soil Conductivity
+  preTransmission();
+  byte soil_conductivity_request[] = { 0x01, 0x03, 0x00, 0x02, 0x00, 0x01, 0x25, 0xca };
+  Serial1.write(soil_conductivity_request, sizeof(soil_conductivity_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_conductivity_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_conductivity_buff, 16);
+  conductivity = word(soil_conductivity_buff[3], soil_conductivity_buff[4]);
+  delay(2000);
+  // Read Soil pH
+  preTransmission();
+  byte soil_pH_request[] = { 0x01, 0x03, 0x00, 0x03, 0x00, 0x01, 0x74, 0x0a };
+  Serial1.write(soil_pH_request, sizeof(soil_pH_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_pH_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_pH_buff, 16);
+  pH = word(soil_pH_buff[3], soil_pH_buff[4]);
+  pH = pH / 10.0;
+  delay(2000);
+  // Read Nitrogen
+  preTransmission();
+  byte soil_Nitrogen_request[] = { 0x01, 0x03, 0x00, 0x04, 0x00, 0x01, 0xc5, 0xcb };
+  Serial1.write(soil_Nitrogen_request, sizeof(soil_Nitrogen_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_Nitrogen_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_Nitrogen_buff, 16);
+  Nitrogen = word(soil_Nitrogen_buff[3], soil_Nitrogen_buff[4]);
+  delay(2000);
+  // Read Phosphorus
+  preTransmission();
+  byte soil_Phosphorus_request[] = { 0x01, 0x03, 0x00, 0x05, 0x00, 0x01, 0x94, 0x0b };
+  Serial1.write(soil_Phosphorus_request, sizeof(soil_Phosphorus_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_Phosphorus_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_Phosphorus_buff, 16);
+  Phosphorus = word(soil_Phosphorus_buff[3], soil_Phosphorus_buff[4]);
+  delay(2000);
+  // Read Potassium
+  preTransmission();
+  byte soil_Potassium_request[] = { 0x01, 0x03, 0x00, 0x06, 0x00, 0x01, 0x64, 0x0b };
+  Serial1.write(soil_Potassium_request, sizeof(soil_Potassium_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_Potassium_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_Potassium_buff, 16);
+  Potassium = word(soil_Potassium_buff[3], soil_Potassium_buff[4]);
+  delay(2000);
+  // Read Salinity
+  preTransmission();
+  byte soil_Salinity_request[] = { 0x01, 0x03, 0x00, 0x07, 0x00, 0x01, 0x35, 0xcb };
+  Serial1.write(soil_Salinity_request, sizeof(soil_Salinity_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_Salinity_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_Salinity_buff, 16);
+  Salinity = word(soil_Salinity_buff[3], soil_Salinity_buff[4]);
+  delay(2000);
+  // Read TDS
+  preTransmission();
+  byte soil_TDS_request[] = { 0x01, 0x03, 0x00, 0x08, 0x00, 0x01, 0x05, 0xc8 };
+  Serial1.write(soil_TDS_request, sizeof(soil_TDS_request));
+  Serial1.flush();
+  postTransmission();
+  byte soil_TDS_buff[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  Serial1.readBytes(soil_TDS_buff, 16);
+  TDS = word(soil_TDS_buff[3], soil_TDS_buff[4]);
+  delay(2000);
+}
+void printSoil(){
+    // Print sensor parameters
+  Serial.print("Humidity: ");
+  Serial.print(humiditysoil);
+  Serial.print("%  ");
+  Serial.print("Temperature: ");
+  Serial.print(temperaturesoil);
+  Serial.print("°C  ");
+  Serial.print("Conductivity: ");
+  Serial.print(conductivity);
+  Serial.print("us/cm  ");
+  Serial.print("pH: ");
+  Serial.print(pH);
+  Serial.print("  ");
+  Serial.print("Nitrogen: ");
+  Serial.print(Nitrogen);
+  Serial.print("mg/L  ");
+  Serial.print("Phosphorus: ");
+  Serial.print(Phosphorus);
+  Serial.print("mg/L   ");
+  Serial.print("Potassium: ");
+  Serial.print(Potassium);
+  Serial.print("mg/L   ");
+  Serial.print("Salinity: ");
+  Serial.print(Salinity);
+  Serial.print("dS/m   ");
+  Serial.print("TDS: ");
+  Serial.print(TDS);
+  Serial.print("ppm  ");
+  Serial.println();
+  delay(1000);
+  Serial.print("Co2 ppm");
+  Serial.println(co2_ppm);
+  Serial.print("Temp Celsius");
+  Serial.println(temperatureAir);
+  Serial.print("hum%");
+  Serial.println(humidityAir);
+  Serial.print("lumens");
+  Serial.println(luxVal);
+  Serial.print("Volts");
+  Serial.println(voltage_v);
+  Serial.print("Curr mA");
+  Serial.println(current_mA);
+  Serial.println();
+}
+void takeI2CMeasurements(){
+  Serial.println("takingI2C Measures");
+  while (! bme.performReading()) {
+    Serial.println("Failed to perform reading :(");
+  }
+  //Serial.print("Approx. Altitude = ");
+  air_pressure_alt_ft=((bme.readAltitude(SEALEVELPRESSURE_HPA))*3.2808399);
+
+  humidityAir=bme.humidity;
+  temperatureAir=bme.temperature;
+  current_mA = ina219.getCurrent_mA();
+  shuntvoltage = ina219.getShuntVoltage_mV();
+  busvoltage = ina219.getBusVoltage_V();
+  voltage_v = busvoltage + (shuntvoltage / 1000);
+  Serial.println("temperature");
+  Serial.println(temperatureAir);
+  
+  luxVal = light.readLight();
+  Serial.println("light");
+  Serial.println(luxVal);
+  delay(100);
+}
+
+void begin_file(){
+    file = SPIFFS.open("/data.csv", FILE_WRITE);
+  if(!file){
+    Serial.println("Error opening the file in WRITE mode");
+    return;
+  }
+  else
+  {
+    Serial.println("File successfully opened in WRITE mode");
+  }
+
+  String dataFields = "SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
+
+  if(file.println(dataFields))  // Write column labels to csv file
+  {
+    Serial.println("Data fields written to file");
+  }
+
+  file.close();
+
+}
+
+void fake_measurement(){
+  String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  append_data_to_file(fake_data);
+}
+
+void append_data_to_file(String data_string){
+    file = SPIFFS.open("/data.csv", FILE_APPEND);
+  if(!file){
+    Serial.println("Error opening the file in APPEND mode");
+    return;
+  }
+  else
+  {
+    Serial.println("File successfully opened in APPEND mode");
+  }
+
+  if(file.println(data_string))  // Add new row to data file
+  {
+    Serial.println("Data added to file");
+  }
+
+  file.close();
+
+}
+void isr(){
+  //Go to sleep now
+    //Use ext1 as a wake-up source
+  esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
+  // enable pull-down resistors and disable pull-up resistors
+  rtc_gpio_pulldown_en(WAKEUP_GPIO_15);
+  rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
+  
+  Serial.println("Going to sleep now");
+  esp_deep_sleep_start();
+  Serial.println("This will never be printed");
+}
+
+void wifiserver() {
+  while(1){
+   WiFiClient client = server.available();   // Listen for incoming clients
+
+  if (client) {                             // If a new client connects,
+    Serial.println("New Client.");          // print a message out in the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    String request = "";
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        currentLine += c;
+        request += c;
+        if (c == '\n') {                    // if the byte is a newline character
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 2) {
+            Serial.println("Received request");
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+           
+            // The HTTP response ends with another blank line
+            client.println();
+            Serial.print(request);
+            Serial.println("is the request");
+            if (request.indexOf("GET /download") >= 0) {
+              Serial.println("Download Requested");
+              File dataFile = SPIFFS.open("/data.csv", FILE_READ);
+              int filesize = dataFile.size();
+
+
+              char buff[1024];
+
+              ChunkedPrint bp(client, buff, sizeof(buff));
+              bp.println(F("HTTP/1.1 200 OK"));
+              bp.println(F("Connection: close"));
+              bp.print(F("Content-Length: "));
+              bp.println(dataFile.size());
+              bp.println(F("Content-Type: text/plain"));
+              bp.println(F("Content-Disposition: attachment; filename=\"data.csv\""));
+              bp.println();
+              uint16_t c = 0;
+              while (dataFile.available()) {
+                bp.write(dataFile.read());
+              }
+              dataFile.close();
+              bp.flush();
+
+               client.println();
+             // output = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><script type=\"text/javascript\" src=\"jzip.js\"></script><script>var filelist = [";
+            } else if (request.indexOf("GET /delete") >= 0) {
+              begin_file();
+              client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // Send your "Hello World" HTML response
+            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body><p>Data deleted</p></html>");
+            //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
+              } else { client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // Send your "Hello World" HTML response
+            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
+            //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
+}
+            // Break out of the while loop
+            request = "";
+            break;
+          } else { // if you got a newline, then clear currentLine
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // Close the connection
+    client.stop();
+    Serial.println("Client disconnected.");
+    Serial.println("");
+  } 
+  }
+  // delay(5000);
+  // Serial.println(1);
+}
+
+void go_to_sleep(){  
+ // Serial.println("Going to sleep now");
+  esp_wifi_stop(); // Turn off wifi
+  esp_deep_sleep_start(); // Sleep
+}
+
+void upload_to_thingspeak(){
+    if(WiFi.status() != WL_CONNECTED){
+      Serial.print("Attempting to connect");
+      while(WiFi.status() != WL_CONNECTED){
+        WiFi.begin(ssid, password); 
+        delay(5000);     
+      } 
+      Serial.println("\nConnected.");
+    }// Channel 1 fields are SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity
+    // Channel 2 fields are TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light
+    ThingSpeak.setField(1,humiditysoil );
+    ThingSpeak.setField(2,temperaturesoil);
+    ThingSpeak.setField(3,conductivity);
+    ThingSpeak.setField(4,pH );
+    ThingSpeak.setField(5,Nitrogen );
+    ThingSpeak.setField(6,Phosphorus );
+    ThingSpeak.setField(7,Potassium );
+    ThingSpeak.setField(8,Salinity );
+    int x = ThingSpeak.writeFields(channel1, api_key1);
+    if(x == 200){
+      Serial.println("Channel update successful.");
+    }
+    else{
+      Serial.println("Problem updating channel. HTTP error code " + String(x));
+    }
+  
+// Channel 2 fields are TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light
+  delay(100);
+    ThingSpeak.setField(1,TDS);
+    ThingSpeak.setField(2,humidityAir);
+    ThingSpeak.setField(3,air_pressure_alt_ft);
+    ThingSpeak.setField(4,temperatureAir);
+    ThingSpeak.setField(5,co2_ppm);
+    ThingSpeak.setField(6,luxVal);
+    int y = ThingSpeak.writeFields(channel2, api_key2);
+    if(x == 200){
+      Serial.println("Channel update successful.");
+    }
+    else{
+      Serial.println("Problem updating channel. HTTP error code " + String(x));
+    }
+  }
