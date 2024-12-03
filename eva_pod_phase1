@@ -51,6 +51,7 @@
 #define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
 #define WAKEUP_GPIO_15              GPIO_NUM_1    // Only RTC IO are allowed - ESP32 Pin example
 #define UPLOAD_TO_THINGSPEAK  1
+#define MEASUREMENT_TIME 60000000ULL
 // Define bitmask for all GPIOs
 uint64_t bitmask = BUTTON_PIN_BITMASK(WAKEUP_GPIO_15);
 
@@ -187,8 +188,8 @@ void setup() {
       Serial.println("Found existing data file");
   }
   // Configure wakeup sources for next sleep cycle
-  uint64_t measurement_time = 1*60*1000000;
-  esp_sleep_enable_timer_wakeup(measurement_time);
+  // uint64_t measurement_time = 1*60*1000000;
+  esp_sleep_enable_timer_wakeup(MEASUREMENT_TIME);
     //Use ext1 as a wake-up source
   esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
   // enable pull-down resistors and disable pull-up resistors
@@ -229,7 +230,7 @@ void setup() {
        Serial.println("Wakeup caused by RTC timer");
        takeI2CMeasurements();
        takeSoilMeasure();
-       fake_measurement();
+       append_data_to_file();
        if (UPLOAD_TO_THINGSPEAK){
        upload_to_thingspeak();
        }
@@ -445,12 +446,7 @@ void begin_file(){
 
 }
 
-void fake_measurement(){
-  String fake_data = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
-  append_data_to_file(fake_data);
-}
-
-void append_data_to_file(String data_string){
+void append_data_to_file(){
     file = SPIFFS.open("/data.csv", FILE_APPEND);
   if(!file){
     Serial.println("Error opening the file in APPEND mode");
@@ -501,6 +497,7 @@ void isr(){
   rtc_gpio_pullup_dis(WAKEUP_GPIO_15);
   
   Serial.println("Going to sleep now");
+ // esp_wifi_stop();
   esp_deep_sleep_start();
   Serial.println("This will never be printed");
 }
