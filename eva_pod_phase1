@@ -17,6 +17,7 @@
   |     DI (Driver Input)          |        D18 (TX1)            |          D10 (TX)
   ___________________________________________________________________________________________
 */
+
 //includes for sensors
 #include <SoftwareSerial.h>
 #include <SPIFFS.h>
@@ -48,11 +49,8 @@
 //constant definition
 #define SEALEVELPRESSURE_HPA (1013.25)
 #define BUTTON_PIN_BITMASK(GPIO) (1ULL << GPIO)  // 2 ^ GPIO_NUMBER in hex
-#define WAKEUP_GPIO_15              GPIO_NUM_2     // Only RTC IO are allowed - ESP32 Pin example
-//#define MEASUREMENT_TIME 14400000000ULL
-#define MEASUREMENT_TIME 60000000ULL
-#define UPLOAD_TO_THINGSPEAK 1
-
+#define WAKEUP_GPIO_15              GPIO_NUM_1    // Only RTC IO are allowed - ESP32 Pin example
+#define UPLOAD_TO_THINGSPEAK  1
 // Define bitmask for all GPIOs
 uint64_t bitmask = BUTTON_PIN_BITMASK(WAKEUP_GPIO_15);
 
@@ -66,6 +64,7 @@ SparkFun_Ambient_Light light(AL_ADDR);
 Adafruit_BME680 bme(&Wire);
 
 Adafruit_INA219 ina219;
+
 
 WiFiClient  client;
 const char* ssid = "CapstoneWifi2";   // your network SSID (name) 
@@ -113,9 +112,72 @@ float SoilMeasureCount=0;
 RTC_DATA_ATTR int button_pressed = 0;
 void setup() {
   // Initialize program Serial port at 115200 baud rate
+  
   Serial.begin(115200);
+  if (UPLOAD_TO_THINGSPEAK){
+      WiFi.mode(WIFI_STA);    
+      ThingSpeak.begin(client);  // Initialize ThingSpeak
+      //intialize Light Sensor
+      Wire.begin();
+  }
+  if(light.begin())
+    Serial.println("Ready to sense some light!"); 
+  else
+    Serial.println("Could not communicate with the sensor!");
+  light.setGain(gain);
+  light.setIntegTime(timeselect);
+  Serial.println("Reading settings..."); 
+  Serial.print("Gain: ");
+  float gainVal = light.readGain();
+  Serial.print(gainVal, 3); 
+  Serial.print(" Integration Time: ");
+  int timeVal = light.readIntegTime();
+  Serial.println(timeVal);
+  //initialize Light Sensor
+
+  //initialize current sensorI2C
+  if (! ina219.begin()) {
+    Serial.println("Failed to find INA219 chip");
+    while (1) { delay(10); }
+  }
+  //initialize current sensorI2C
+
+
+  //initialize BMEI2C
+  if (!bme.begin()) {
+    Serial.println("Could not find a valid BME680 sensor, check wiring!");
+    while (1);
+  }
+  bme.setTemperatureOversampling(BME680_OS_8X);
+  bme.setHumidityOversampling(BME680_OS_2X);
+  bme.setPressureOversampling(BME680_OS_4X);
+  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+  bme.setGasHeater(320, 150); // 320*C for 150 ms
+  //initialize BMEI2C
+
+
+  //initialize wifi/thingspeak
+  // WiFi.mode(WIFI_STA);    
+  // ThingSpeak.begin(client);  // Initialize ThingSpeak
+  // while (!Serial) delay(10);
+  //initialize wifi/thingspeak
+
+
+  // Initialize modbus Serial port at 4800 baud rate
+  pinMode(MAX485_RE_NEG, OUTPUT);
+  pinMode(MAX485_DE, OUTPUT);
+  digitalWrite(MAX485_RE_NEG, 0);
+  digitalWrite(MAX485_DE, 0);
+  // Initialize modbus Serial port at 4800 baud rate
+ 
+  // Start the Modbus serial Port, for Soil_sensor
+  Serial1.begin(4800, SERIAL_8N1, 17, 18);
+  // Start the Modbus serial Port, for Soil_sensor
+
+
   delay(1000);
 
+  
   if(!SPIFFS.begin(true)){
   Serial.println("Error mounting SPIFFS");
   } else if (!SPIFFS.exists("/data.csv")){
@@ -125,8 +187,8 @@ void setup() {
       Serial.println("Found existing data file");
   }
   // Configure wakeup sources for next sleep cycle
-  //uint64_t measurement_time = 14400000000ULL; //4*3600*1000000;
-  esp_sleep_enable_timer_wakeup(MEASUREMENT_TIME);
+  uint64_t measurement_time = 1*60*1000000;
+  esp_sleep_enable_timer_wakeup(measurement_time);
     //Use ext1 as a wake-up source
   esp_sleep_enable_ext1_wakeup_io(bitmask, ESP_EXT1_WAKEUP_ANY_HIGH);
   // enable pull-down resistors and disable pull-up resistors
@@ -162,78 +224,23 @@ void setup() {
   }
         break;
     case ESP_SLEEP_WAKEUP_TIMER: // Wakeup by timer -> take measurement
-      {
-        if (UPLOAD_TO_THINGSPEAK){
-            WiFi.mode(WIFI_STA);    
-           ThingSpeak.begin(client);  // Initialize ThingSpeak
-        }
-
-      //intialize Light Sensor
-      Wire.begin();
-      if(light.begin())
-        Serial.println("Ready to sense some light!"); 
-      else
-        Serial.println("Could not communicate with the sensor!");
-      light.setGain(gain);
-      light.setIntegTime(timeselect);
-      Serial.println("Reading settings..."); 
-      Serial.print("Gain: ");
-      float gainVal = light.readGain();
-      Serial.print(gainVal, 3); 
-      Serial.print(" Integration Time: ");
-      int timeVal = light.readIntegTime();
-      Serial.println(timeVal);
-      //initialize Light Sensor
-
-      //initialize current sensorI2C
-      if (! ina219.begin()) {
-        Serial.println("Failed to find INA219 chip");
-        while (1) { delay(10); }
-      }
-      //initialize current sensorI2C
-
-      //initialize BMEI2C
-      if (!bme.begin()) {
-        Serial.println("Could not find a valid BME680 sensor, check wiring!");
-        while (1);
-      }
-      bme.setTemperatureOversampling(BME680_OS_8X);
-      bme.setHumidityOversampling(BME680_OS_2X);
-      bme.setPressureOversampling(BME680_OS_4X);
-      bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-      bme.setGasHeater(320, 150); // 320*C for 150 ms
-      //initialize BMEI2C
-
-      //initialize wifi/thingspeak
-      // WiFi.mode(WIFI_STA);    
-      // ThingSpeak.begin(client);  // Initialize ThingSpeak
-      // while (!Serial) delay(10);
-      //initialize wifi/thingspeak
-
-      // Initialize modbus Serial port at 4800 baud rate
-      pinMode(MAX485_RE_NEG, OUTPUT);
-      pinMode(MAX485_DE, OUTPUT);
-      digitalWrite(MAX485_RE_NEG, 0);
-      digitalWrite(MAX485_DE, 0);
-      // Initialize modbus Serial port at 4800 baud rate
-    
-      // Start the Modbus serial Port, for Soil_sensor
-      Serial1.begin(4800, SERIAL_8N1, 17, 18);
-      // Start the Modbus serial Port, for Soil_sensor
-
-      //while (!Serial) delay(10);    
+      
+      while (!Serial) delay(10);    
        Serial.println("Wakeup caused by RTC timer");
-
        fake_measurement();
        takeI2CMeasurements();
        takeSoilMeasure();
-       if (UPLOAD_TO_THINGSPEAK){     
-        upload_to_thingspeak();
-        }
-       go_to_sleep();}
+       if (UPLOAD_TO_THINGSPEAK){
+       upload_to_thingspeak();
+       }
+       go_to_sleep();
        break;
     default : Serial.printf("Wakeup caused by unexpected source",wakeup_reason); go_to_sleep(); break;
   }
+
+  delay(1000);  //Take some time to open up the Serial Monitor
+  
+  
 
 }
 
@@ -453,8 +460,7 @@ void append_data_to_file(String data_string){
   {
     Serial.println("File successfully opened in APPEND mode");
   }
- 
-  file.print(temperatureAir);
+file.print(temperatureAir);
   if(file.println(data_string))  // Add new row to data file
   {
     Serial.println("Data added to file");
