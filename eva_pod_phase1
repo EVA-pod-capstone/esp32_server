@@ -227,9 +227,9 @@ void setup() {
       
       while (!Serial) delay(10);    
        Serial.println("Wakeup caused by RTC timer");
-       fake_measurement();
        takeI2CMeasurements();
        takeSoilMeasure();
+       fake_measurement();
        if (UPLOAD_TO_THINGSPEAK){
        upload_to_thingspeak();
        }
@@ -460,11 +460,34 @@ void append_data_to_file(String data_string){
   {
     Serial.println("File successfully opened in APPEND mode");
   }
+
+file.print(humiditysoil);
+file.print(',');
+file.print(temperaturesoil);
+file.print(',');
+file.print(conductivity);
+file.print(',');
+file.print(pH);
+file.print(',');
+file.print(Nitrogen);
+file.print(',');
+file.print(Phosphorus);
+file.print(',');
+file.print(Potassium);
+file.print(',');
+file.print(Salinity);
+file.print(',');
+file.print(TDS);
+file.print(',');
+file.print(humidityAir);
+file.print(',');
+file.print(air_pressure_alt_ft);
+file.print(',');
 file.print(temperatureAir);
-  if(file.println(data_string))  // Add new row to data file
-  {
-    Serial.println("Data added to file");
-  }
+file.print(',');
+file.print(co2_ppm);
+file.print(',');
+file.println(light_lux);
 
   file.close();
 
