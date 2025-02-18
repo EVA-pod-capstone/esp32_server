@@ -108,9 +108,34 @@ void loop() {
             client.println();
 
             // Send your "Hello World" HTML response
-            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
-            client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
-            //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
+            // client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            // client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
+            client.println(" \
+<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
+<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
+    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body> \
+    <script> \
+        window.onload = function() { \
+            var deviceClock = new Date();\
+            var hour = deviceClock.getHours(); \
+            var minute = deviceClock.getMinutes(); \
+            var second = deviceClock.getSeconds(); \
+            fetch(window.location.href + \"timestamp\", { \
+            method: \"POST\", \
+            body: JSON.stringify({ \
+                hour: hour, \
+                minute: minute, \
+                second: second \
+            }), \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
+        }; \    
+    </script> \
+</html> \
+");
 }
             // Break out of the while loop
             request = "";
@@ -152,12 +177,12 @@ void append_data_to_file(String data_string){
   }
   else
   {
-    Serial.println("File successfully opened in APPEND mode");
+  //  Serial.println("File successfully opened in APPEND mode");
   }
 
   if(file.println(data_string))  // Add new row to data file
   {
-    Serial.println("Data added to file");
+   // Serial.println("Data added to file");
   }
 
   file.close();
