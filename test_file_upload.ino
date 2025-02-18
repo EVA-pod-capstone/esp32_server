@@ -5,6 +5,8 @@
 // Set ESP32 wifi server credentials
 const char* ssid = "ESP32-Access-Point";
 const char* password = "123456789";
+
+const int MEASUREMENT_TIME = 5000;
 String timestring = "";
 String normal_page = " \
 <html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
@@ -66,7 +68,7 @@ void setup() {
 }
 
 void loop() {
-  delay(5000);
+  delay(MEASUREMENT_TIME);
   fake_measurement();
    WiFiClient client = server.available();   // Listen for incoming clients
 
@@ -136,7 +138,7 @@ void loop() {
             client.println();
              client.println(normal_page);
                 timestring = timestring.substring(0, timestring.indexOf(" "));
-                append_data_to_file(timestring);
+                append_data_to_file(timestring+"&measurement_interval="+MEASUREMENT_INTERVAL);
                 Serial.print("The timestring is ");
                 Serial.println(timestring);
 
