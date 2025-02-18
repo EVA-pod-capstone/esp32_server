@@ -6,7 +6,7 @@
 const char* ssid = "ESP32-Access-Point";
 const char* password = "123456789";
 
-const int MEASUREMENT_TIME = 5000;
+const int MEASUREMENT_INTERVAL = 5000;
 String timestring = "";
 String normal_page = " \
 <html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
@@ -68,7 +68,7 @@ void setup() {
 }
 
 void loop() {
-  delay(MEASUREMENT_TIME);
+  delay(MEASUREMENT_INTERVAL);
   fake_measurement();
    WiFiClient client = server.available();   // Listen for incoming clients
 
