@@ -13,7 +13,16 @@ String normal_page = " \
 <body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
     <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body> \
     <script> \
+        var latitude = 999; \
+        var longitude = 999; \
         window.onload = function() { \
+        if (navigator.geolocation) { \
+            navigator.geolocation.getCurrentPosition(set_location); \
+        } else { \
+            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
+            var latitude = 999; \
+            var longitude = 999; \
+        } \
             var deviceClock = new Date();\
             var hour = deviceClock.getHours(); \
             var minute = deviceClock.getMinutes(); \
@@ -22,14 +31,21 @@ String normal_page = " \
             var month = deviceClock.getMonth() + 1; \
             var year = deviceClock.getFullYear(); \
             fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
-                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second, { \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
+                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
             method: \"GET\", \
             headers: { \
                 \"Accept\": \"application/json\", \
                 \"Content-type\": \"application/json\" \
             } \
 }); \
-        }; \    
+        } \  
+        function set_location(position){ \
+          latitude = position.coords.latitude; \
+          longitude = position.coords.longitude; \
+          console.log(latitude); \
+          console.log(longitude); \
+        } \  
     </script> \
 </html> \
 ";
