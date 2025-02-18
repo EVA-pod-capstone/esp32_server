@@ -71,7 +71,6 @@ void loop() {
               File dataFile = SPIFFS.open("/data.csv", FILE_READ);
               int filesize = dataFile.size();
 
-
               char buff[1024];
 
               ChunkedPrint bp(client, buff, sizeof(buff));
@@ -120,13 +119,12 @@ void loop() {
             var hour = deviceClock.getHours(); \
             var minute = deviceClock.getMinutes(); \
             var second = deviceClock.getSeconds(); \
-            fetch(window.location.href + \"timestamp\", { \
-            method: \"POST\", \
-            body: JSON.stringify({ \
-                hour: hour, \
-                minute: minute, \
-                second: second \
-            }), \
+            var day = deviceClock.getDate(); \
+            var month = deviceClock.getMonth() + 1; \
+            var year = deviceClock.getFullYear(); \
+            fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second, { \
+            method: \"GET\", \
             headers: { \
                 \"Accept\": \"application/json\", \
                 \"Content-type\": \"application/json\" \
