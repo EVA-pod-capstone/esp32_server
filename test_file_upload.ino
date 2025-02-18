@@ -5,6 +5,32 @@
 // Set ESP32 wifi server credentials
 const char* ssid = "ESP32-Access-Point";
 const char* password = "123456789";
+String timestring = "";
+String normal_page = " \
+<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
+<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
+    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body> \
+    <script> \
+        window.onload = function() { \
+            var deviceClock = new Date();\
+            var hour = deviceClock.getHours(); \
+            var minute = deviceClock.getMinutes(); \
+            var second = deviceClock.getSeconds(); \
+            var day = deviceClock.getDate(); \
+            var month = deviceClock.getMonth() + 1; \
+            var year = deviceClock.getFullYear(); \
+            fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second, { \
+            method: \"GET\", \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
+        }; \    
+    </script> \
+</html> \
+";
 
 // input button pin
 int button = 0;
@@ -101,7 +127,24 @@ void loop() {
             client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
             client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body><p>Data deleted</p></html>");
             //client.println("<body><p><a href=\"test.txt\">Download!</a></p></body></html>");
-              } else { client.println("HTTP/1.1 200 OK");
+              } else if (request.indexOf("GET /timestamp") >= 0) { 
+              timestring = request.substring(request.indexOf("GET /timestamp")+15);
+
+                            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+             client.println(normal_page);
+                timestring = timestring.substring(0, timestring.indexOf(" "));
+                append_data_to_file(timestring);
+                Serial.print("The timestring is ");
+                Serial.println(timestring);
+
+            // Send your "Hello World" HTML response
+            // client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
+            // client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
+           
+} else { client.println("HTTP/1.1 200 OK");
             client.println("Content-type:text/html");
             client.println("Connection: close");
             client.println();
@@ -109,31 +152,7 @@ void loop() {
             // Send your "Hello World" HTML response
             // client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>");
             // client.println("<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a><a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body></html>");
-            client.println(" \
-<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
-<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
-    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p></body> \
-    <script> \
-        window.onload = function() { \
-            var deviceClock = new Date();\
-            var hour = deviceClock.getHours(); \
-            var minute = deviceClock.getMinutes(); \
-            var second = deviceClock.getSeconds(); \
-            var day = deviceClock.getDate(); \
-            var month = deviceClock.getMonth() + 1; \
-            var year = deviceClock.getFullYear(); \
-            fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
-                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second, { \
-            method: \"GET\", \
-            headers: { \
-                \"Accept\": \"application/json\", \
-                \"Content-type\": \"application/json\" \
-            } \
-}); \
-        }; \    
-    </script> \
-</html> \
-");
+            client.println(normal_page);
 }
             // Break out of the while loop
             request = "";
