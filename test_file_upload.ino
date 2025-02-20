@@ -17,11 +17,31 @@ String normal_page = " \
         var longitude = 999; \
         window.onload = function() { \
         if (navigator.geolocation) { \
-            navigator.geolocation.getCurrentPosition(set_location); \
+            navigator.geolocation.getCurrentPosition((position) => {  \
+              latitude = position.coords.latitude; \
+              longitude = position.coords.longitude; \
+              console.log(latitude); \
+              console.log(longitude); \
+              }, (error) => {console.log(error); \
+switch(error.code) { \
+    case error.PERMISSION_DENIED: \
+      console.log(\"Permission denied\"); \
+      break; \
+    case error.POSITION_UNAVAILABLE: \
+      console.log(\"Position unavailable\"); \
+      break; \
+    case error.TIMEOUT: \
+      console.log(\"Location timeout\"); \
+      break; \
+    case error.UNKNOWN_ERROR: \
+      console.log(\"Unknown error\"); \
+      break; \
+  } \
+  }); \
         } else { \
             console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
-            var latitude = 999; \
-            var longitude = 999; \
+            latitude = 999; \
+            longitude = 999; \
         } \
             var deviceClock = new Date();\
             var hour = deviceClock.getHours(); \
@@ -39,13 +59,7 @@ String normal_page = " \
                 \"Content-type\": \"application/json\" \
             } \
 }); \
-        } \  
-        function set_location(position){ \
-          latitude = position.coords.latitude; \
-          longitude = position.coords.longitude; \
-          console.log(latitude); \
-          console.log(longitude); \
-        } \  
+        } \ 
     </script> \
 </html> \
 ";
