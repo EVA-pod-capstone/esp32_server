@@ -1,10 +1,9 @@
 /**
-* Borrowed from https://github.com/jackjansen/esp32_idf5_https_server/tree/master/examples/Static-Page
  * Example for the ESP32 HTTP(S) Webserver
  *
  * IMPORTANT NOTE:
  * To run this script, your need to
- *  1) Enter your AP SSID and Password below this comment
+ *  1) Enter your WiFi SSID and PSK below this comment
  *  2) Make sure to have certificate data available. You will find a
  *     shell script and instructions to do so in the library folder
  *     under extras/
@@ -14,10 +13,6 @@
  *  - Show simple page on web server root
  *  - 404 for everything else
  */
-
-// TODO: Configure your WiFi here
-// #define WIFI_SSID "CapstoneWifi"
-// #define WIFI_PSK  "RuleNumber9"
 
 const char* ssid = "ESP32-Access-Point";
 const char* password = "123456789";
@@ -38,6 +33,63 @@ const char* password = "123456789";
 #include <HTTPRequest.hpp>
 #include <HTTPResponse.hpp>
 
+String normal_page = " \
+<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
+<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
+    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
+    <p id=\"error-code\">Error code will display here</p></body> \
+    <script> \
+        var latitude = 999; \
+        var longitude = 999; \
+        window.onload = function() { \
+        if (navigator.geolocation) { \
+            navigator.geolocation.getCurrentPosition((position) => {  \
+              latitude = position.coords.latitude; \
+              longitude = position.coords.longitude; \
+              console.log(latitude); \
+              console.log(longitude); \
+              }, (error) => {console.log(error); document.getElementById(\"error-code\").innerText = error.message; \
+switch(error.code) { \
+    case error.PERMISSION_DENIED: \
+      console.log(\"Permission denied\"); \
+      break; \
+    case error.POSITION_UNAVAILABLE: \
+      console.log(\"Position unavailable\"); \
+      break; \
+    case error.TIMEOUT: \
+      console.log(\"Location timeout\"); \
+      break; \
+    case error.UNKNOWN_ERROR: \
+      console.log(\"Unknown error\"); \
+      break; \
+  } \
+  }); \
+        } else { \
+            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
+            latitude = 999; \
+            longitude = 999; \
+        } \
+            var deviceClock = new Date();\
+            var hour = deviceClock.getHours(); \
+            var minute = deviceClock.getMinutes(); \
+            var second = deviceClock.getSeconds(); \
+            var day = deviceClock.getDate(); \
+            var month = deviceClock.getMonth() + 1; \
+            var year = deviceClock.getFullYear(); \
+            fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
+                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
+            method: \"GET\", \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
+        } \ 
+    </script> \
+</html> \
+";
+
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
 using namespace httpsserver;
 
@@ -56,41 +108,31 @@ HTTPSServer secureServer = HTTPSServer(&cert);
 // which are pointers to the request data (read request body, headers, ...) and
 // to the response data (write response, set status code, ...)
 void handleRoot(HTTPRequest * req, HTTPResponse * res);
-void handleFavicon(HTTPRequest * req, HTTPResponse * res);
-void handle404(HTTPRequest * req, HTTPResponse * res);
+void handleDownload(HTTPRequest * req, HTTPResponse * res);
+void handleDelete(HTTPRequest * req, HTTPResponse * res);
+void handleTimestamp(HTTPRequest * req, HTTPResponse * res);
+void handleLocation(HTTPRequest * req, HTTPResponse * res);
 
 void setup() {
   // For logging
   Serial.begin(115200);
-
-  // Connect to WiFi
-  // Serial.println("Setting up WiFi");
-  // WiFi.begin(WIFI_SSID, WIFI_PSK);
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   Serial.print(".");
-  //   delay(500);
-  // }
-  // Serial.print("Connected. IP=");
-  // Serial.println(WiFi.localIP());   
   
   WiFi.softAP(ssid, password);
-
 
   // For every resource available on the server, we need to create a ResourceNode
   // The ResourceNode links URL and HTTP method to a handler function
   ResourceNode * nodeRoot    = new ResourceNode("/", "GET", &handleRoot);
-  ResourceNode * nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
-  ResourceNode * node404     = new ResourceNode("", "GET", &handle404);
+  ResourceNode * nodeDownload = new ResourceNode("/download", "GET", &handleDownload);
+  ResourceNode * nodeDelete = new ResourceNode("/delete", "GET", &handleDelete);
+  ResourceNode * nodeTimestamp = new ResourceNode("/timestamp", "GET", &handleTimestamp);
+  ResourceNode * nodeLocation = new ResourceNode("/location", "GET", &handleLocation);
 
-  // Add the root node to the server
+  // Add the nodes to the server
   secureServer.registerNode(nodeRoot);
-
-  // Add the favicon
-  secureServer.registerNode(nodeFavicon);
-
-  // Add the 404 not found node to the server.
-  // The path is ignored for the default node.
-  secureServer.setDefaultNode(node404);
+  secureServer.registerNode(nodeDownload);
+  secureServer.registerNode(nodeDelete);
+  secureServer.registerNode(nodeTimestamp);
+  secureServer.registerNode(nodeLocation);
 
   Serial.println("Starting server...");
   secureServer.start();
@@ -114,42 +156,50 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
 
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
-  res->println("<!DOCTYPE html>");
-  res->println("<html>");
-  res->println("<head><title>Hello World!</title></head>");
-  res->println("<body>");
-  res->println("<h1>Hello World!</h1>");
-  res->print("<p>Your server is running for ");
-  // A bit of dynamic data: Show the uptime
-  res->print((int)(millis()/1000), DEC);
-  res->println(" seconds.</p>");
-  res->println("</body>");
-  res->println("</html>");
+  res->println(normal_page);
+
 }
 
-void handleFavicon(HTTPRequest * req, HTTPResponse * res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "image/vnd.microsoft.icon");
-  // Write data from header file
-  res->write(FAVICON_DATA, FAVICON_LENGTH);
-}
-
-void handle404(HTTPRequest * req, HTTPResponse * res) {
-  // Discard request body, if we received any
-  // We do this, as this is the default node and may also server POST/PUT requests
-  req->discardRequestBody();
-
-  // Set the response status
-  res->setStatusCode(404);
-  res->setStatusText("Not Found");
-
-  // Set content type of the response
+void handleDelete(HTTPRequest * req, HTTPResponse * res) {
+  // Status code is 200 OK by default.
+  // We want to deliver a simple HTML page, so we send a corresponding content type:
   res->setHeader("Content-Type", "text/html");
 
-  // Write a tiny HTTP page
-  res->println("<!DOCTYPE html>");
-  res->println("<html>");
-  res->println("<head><title>Not Found</title></head>");
-  res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
-  res->println("</html>");
+  // The response implements the Print interface, so you can use it just like
+  // you would write to Serial etc.
+  res->println(normal_page);
+
+}
+
+void handleDownload(HTTPRequest * req, HTTPResponse * res) {
+  // Status code is 200 OK by default.
+  // We want to deliver a simple HTML page, so we send a corresponding content type:
+  res->setHeader("Content-Type", "text/html");
+
+  // The response implements the Print interface, so you can use it just like
+  // you would write to Serial etc.
+  res->println(normal_page);
+
+}
+
+void handleTimestamp(HTTPRequest * req, HTTPResponse * res) {
+  // Status code is 200 OK by default.
+  // We want to deliver a simple HTML page, so we send a corresponding content type:
+  res->setHeader("Content-Type", "text/html");
+
+  // The response implements the Print interface, so you can use it just like
+  // you would write to Serial etc.
+  res->println(normal_page);
+
+}
+
+void handleLocation(HTTPRequest * req, HTTPResponse * res) {
+  // Status code is 200 OK by default.
+  // We want to deliver a simple HTML page, so we send a corresponding content type:
+  res->setHeader("Content-Type", "text/html");
+
+  // The response implements the Print interface, so you can use it just like
+  // you would write to Serial etc.
+  res->println(normal_page);
+
 }
