@@ -234,14 +234,18 @@ void isr() // if wifi on, turn off. if wifi off, turn on
 }
 
 void increment_time(){
+  int days_in_february = ((year % 400 == 0) || ((year % 4 == 0) && ((year % 100 != 0)))) ? 29 : 28;
+  int days_in_curr_month = (month == 1) ? 31 : (month == 2) ? days_in_february : (month == 3) ? 31 :
+                            (month == 4) ? 30 : (month == 5) ? 31 : (month == 6) ? 30 :
+                            (month == 7) ? 31 : (month == 8) ? 31 : (month == 9) ? 30 :
+                            (month == 10) ? 31 : (month == 11) ? 30 : 31;
   int seconds_added = MEASUREMENT_INTERVAL / 1000;
   int minutes_added = int((second + seconds_added) / 60);
   int hours_added = int((minute + minutes_added) / 60);
   int days_added = int((hour + hours_added) / 24);
-  int months_added = int((day + days_added) / 30);
+  int months_added = int((day + days_added) / days_in_curr_month);
   int years_added = int((month + months_added) / 12);
-  Serial.print("We are adding to years: ");
-  Serial.println(years_added);
+
   second = int((second + seconds_added) % 60);
   minute = int((minute + minutes_added) % 60);
   hour = int((hour + hours_added) % 24);
@@ -251,13 +255,14 @@ void increment_time(){
 }
 
 void fake_measurement(){
-  String fake_data = "";
-  if (year){
-    fake_data = String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
-  } else {
-    fake_data = ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
-  }
+  // String fake_data = "";
+  // if (year){
+  //   fake_data = String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  // } else {
+  //   fake_data = ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  // }
   increment_time();
+  String fake_data = String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
   append_data_to_file(fake_data);
 }
 
@@ -292,7 +297,7 @@ void begin_file(){
     Serial.println("File successfully opened in WRITE mode");
   }
 
-  String dataFields = "SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
+  String dataFields = "Time, SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
 
   if(file.println(dataFields))  // Write column labels to csv file
   {
