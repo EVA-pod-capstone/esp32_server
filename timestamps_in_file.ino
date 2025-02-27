@@ -263,7 +263,14 @@ void fake_measurement(){
   //   fake_data = ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
   // }
   increment_time();
-  String fake_data = String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  // month, day, hour, minute, second all need 0 padding
+  String month_pad = (month < 10) ? "0" : "";
+  String day_pad = (day < 10) ? "0" : "";
+  String hour_pad = (hour < 10) ? "0" : "";
+  String minute_pad = (minute < 10) ? "0" : "";
+  String second_pad = (second < 10) ? "0" : "";
+
+  String fake_data = String(year) + "-" + month_pad + String(month) + "-" + day_pad + String(day) + " " + hour_pad + String(hour) + ":" + minute_pad + String(minute) + ":" + second_pad + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
   append_data_to_file(fake_data);
 }
 
