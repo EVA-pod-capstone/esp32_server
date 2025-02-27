@@ -240,6 +240,7 @@ void increment_time(){
                             (month == 7) ? 31 : (month == 8) ? 31 : (month == 9) ? 30 :
                             (month == 10) ? 31 : (month == 11) ? 30 : 31;
   int seconds_added = MEASUREMENT_INTERVAL / 1000;
+ // int seconds_added = 607000; // For testing correct rollover over long intervals
   int minutes_added = int((second + seconds_added) / 60);
   int hours_added = int((minute + minutes_added) / 60);
   int days_added = int((hour + hours_added) / 24);
@@ -249,7 +250,7 @@ void increment_time(){
   second = int((second + seconds_added) % 60);
   minute = int((minute + minutes_added) % 60);
   hour = int((hour + hours_added) % 24);
-  day = int((day + days_added) % 30);
+  day = int((day + days_added) % days_in_curr_month);
   month = int((month + months_added) % 12);
   year = int((year + years_added));
 }
