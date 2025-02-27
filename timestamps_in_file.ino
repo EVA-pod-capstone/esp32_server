@@ -52,12 +52,12 @@ switch(error.code) { \
             longitude = 999; \
         } \
             var deviceClock = new Date();\
-            var hour = deviceClock.getHours(); \
-            var minute = deviceClock.getMinutes(); \
-            var second = deviceClock.getSeconds(); \
-            var day = deviceClock.getDate(); \
-            var month = deviceClock.getMonth() + 1; \
-            var year = deviceClock.getFullYear(); \
+            var hour = deviceClock.getUTCHours(); \
+            var minute = deviceClock.getUTCMinutes(); \
+            var second = deviceClock.getUTCSeconds(); \
+            var day = deviceClock.getUTCDate(); \
+            var month = deviceClock.getUTCMonth() + 1; \
+            var year = deviceClock.getUTCFullYear(); \
             fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
                                       + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
                                       + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
