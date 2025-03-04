@@ -35,11 +35,63 @@ const char* password = "123456789";
 #include <HTTPRequest.hpp>
 #include <HTTPResponse.hpp>
 
+File file;
+
 String normal_page = " \
 <html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
 <body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
     <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
     <a href=\"/send_data\"><button class=\"button button2\">Send timestamp and location</button></a></p> \
+    <p id=\"error-code\">Error code will display here</p></body> \
+    <script> \
+        var latitude = 999; \
+        var longitude = 999; \
+        window.onload = function() { \
+        if (navigator.geolocation) { \
+            navigator.geolocation.getCurrentPosition((position) => {  \
+              latitude = position.coords.latitude; \
+              longitude = position.coords.longitude; \
+              console.log(latitude); \
+              console.log(longitude); \
+              }, (error) => {console.log(error); document.getElementById(\"error-code\").innerText = error.message; \
+switch(error.code) { \
+    case error.PERMISSION_DENIED: \
+      console.log(\"Permission denied\"); \
+      break; \
+    case error.POSITION_UNAVAILABLE: \
+      console.log(\"Position unavailable\"); \
+      break; \
+    case error.TIMEOUT: \
+      console.log(\"Location timeout\"); \
+      break; \
+    case error.UNKNOWN_ERROR: \
+      console.log(\"Unknown error\"); \
+      break; \
+  } \
+  }); \
+        } else { \
+            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
+            latitude = 999; \
+            longitude = 999; \
+        } \
+            var deviceClock = new Date();\
+            var hour = deviceClock.getHours(); \
+            var minute = deviceClock.getMinutes(); \
+            var second = deviceClock.getSeconds(); \
+            var day = deviceClock.getDate(); \
+            var month = deviceClock.getMonth() + 1; \
+            var year = deviceClock.getFullYear(); \
+        } \ 
+    </script> \
+</html> \
+";
+
+String deleted_page = " \
+<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
+<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
+    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
+    <a href=\"/send_data\"><button class=\"button button2\">Send timestamp and location</button></a></p> \
+    <p id=\"deleted-status\">Data deleted</p> \
     <p id=\"error-code\">Error code will display here</p></body> \
     <script> \
         var latitude = 999; \
@@ -138,13 +190,14 @@ void setup() {
     Serial.println("Server ready.");
   }
 }
-
+String fake_data = "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
 void loop() {
   // This call will let the server do its work
   secureServer.loop();
 
   // Other code would go here...
-  delay(1);
+  delay(2);
+  append_data_to_file(fake_data);
 }
 
 void handleRoot(HTTPRequest * req, HTTPResponse * res) {
@@ -162,12 +215,13 @@ void handleDelete(HTTPRequest * req, HTTPResponse * res) {
   // Status code is 200 OK by default.
   // We want to deliver a simple HTML page, so we send a corresponding content type:
   res->setHeader("Content-Type", "text/html");
-
+  begin_file();
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
-  res->println(normal_page);
+  res->println(deleted_page);
 
 }
+
 
 void handleDownload(HTTPRequest * req, HTTPResponse * res) {
   Serial.print("got download request");
@@ -189,21 +243,11 @@ void handleDownload(HTTPRequest * req, HTTPResponse * res) {
   int l;
   while(dataFile.available()) {
     l = dataFile.readBytes((char*)buffer, sizeof(buffer));
-    // buffer[l] = 0;
-    // Serial.println(buffer);
-    // // HTTPRequest::readBytes provides access to the request body.
-    // // It requires a buffer, the max buffer length and it will return
-    // // the amount of bytes that have been written to the buffer.
-    // size_t s = req->readBytes(buffer, 256);
-
-    // The response does not only implement the Print interface to
-    // write character data to the response but also the write function
-    // to write binary data to the response.
     res->write(buffer, l);
   }
   res->println("");
-
 }
+
 
 void handleSend(HTTPRequest * req, HTTPResponse * res) {
     // Serial.print(req->getRequestString());
@@ -220,7 +264,7 @@ void handleSend(HTTPRequest * req, HTTPResponse * res) {
 
 
 void begin_file(){
-    File file = SPIFFS.open("/data.csv", FILE_WRITE);
+    file = SPIFFS.open("/data.csv", FILE_WRITE);
   if(!file){
     Serial.println("Error opening the file in WRITE mode");
     return;
@@ -235,6 +279,26 @@ void begin_file(){
   if(file.println(dataFields))  // Write column labels to csv file
   {
     Serial.println("Data fields written to file");
+  }
+
+  file.close();
+
+}
+
+void append_data_to_file(String data_string){
+    file = SPIFFS.open("/data.csv", FILE_APPEND);
+  if(!file){
+    Serial.println("Error opening the file in APPEND mode");
+    return;
+  }
+  else
+  {
+  //  Serial.println("File successfully opened in APPEND mode");
+  }
+
+  if(file.println(data_string))  // Add new row to data file
+  {
+   // Serial.println("Data added to file");
   }
 
   file.close();
