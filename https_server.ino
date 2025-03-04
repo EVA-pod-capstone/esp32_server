@@ -25,7 +25,9 @@ const char* password = "123456789";
 #include "favicon.h"
 
 // We will use wifi
+#include <SPIFFS.h>
 #include <WiFi.h>
+#include <StreamLib.h>
 
 // Includes for the server
 #include <HTTPSServer.hpp>
@@ -37,6 +39,7 @@ String normal_page = " \
 <html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
 <body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
     <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
+    <a href=\"/send_data\"><button class=\"button button2\">Send timestamp and location</button></a></p> \
     <p id=\"error-code\">Error code will display here</p></body> \
     <script> \
         var latitude = 999; \
@@ -76,15 +79,6 @@ switch(error.code) { \
             var day = deviceClock.getDate(); \
             var month = deviceClock.getMonth() + 1; \
             var year = deviceClock.getFullYear(); \
-            fetch(window.location.href + \"timestamp?year=\" + year + \"&month=\" + month + \"&day=\" + day \
-                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
-                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
-            method: \"GET\", \
-            headers: { \
-                \"Accept\": \"application/json\", \
-                \"Content-type\": \"application/json\" \
-            } \
-}); \
         } \ 
     </script> \
 </html> \
@@ -116,6 +110,12 @@ void handleLocation(HTTPRequest * req, HTTPResponse * res);
 void setup() {
   // For logging
   Serial.begin(115200);
+
+  if(!SPIFFS.begin(true)){
+  Serial.println("Error mounting SPIFFS");
+  } else {
+    begin_file();
+  }
   
   WiFi.softAP(ssid, password);
 
@@ -124,15 +124,13 @@ void setup() {
   ResourceNode * nodeRoot    = new ResourceNode("/", "GET", &handleRoot);
   ResourceNode * nodeDownload = new ResourceNode("/download", "GET", &handleDownload);
   ResourceNode * nodeDelete = new ResourceNode("/delete", "GET", &handleDelete);
-  ResourceNode * nodeTimestamp = new ResourceNode("/timestamp", "GET", &handleTimestamp);
-  ResourceNode * nodeLocation = new ResourceNode("/location", "GET", &handleLocation);
+  ResourceNode * nodeSend = new ResourceNode("/send_data", "GET", &handleSend);
 
   // Add the nodes to the server
   secureServer.registerNode(nodeRoot);
   secureServer.registerNode(nodeDownload);
   secureServer.registerNode(nodeDelete);
-  secureServer.registerNode(nodeTimestamp);
-  secureServer.registerNode(nodeLocation);
+  secureServer.registerNode(nodeSend);
 
   Serial.println("Starting server...");
   secureServer.start();
@@ -172,6 +170,44 @@ void handleDelete(HTTPRequest * req, HTTPResponse * res) {
 }
 
 void handleDownload(HTTPRequest * req, HTTPResponse * res) {
+  Serial.print("got download request");
+  //Serial.print(req->getRequestString());
+  // Status code is 200 OK by default.
+  // We want to deliver a simple HTML page, so we send a corresponding content type:
+  res->setHeader("Content-Type", "text/plain");
+  res->setHeader("Content-Disposition", "attachment");
+
+  // The response implements the Print interface, so you can use it just like
+  // you would write to Serial etc.
+  // res->println(normal_page);
+  File dataFile = SPIFFS.open("/data.csv", FILE_READ);
+  int filesize = dataFile.size();
+
+  byte buffer[256];
+  // HTTPRequest::requestComplete can be used to check whether the
+  // body has been parsed completely.
+  int l;
+  while(dataFile.available()) {
+    l = dataFile.readBytes((char*)buffer, sizeof(buffer));
+    // buffer[l] = 0;
+    // Serial.println(buffer);
+    // // HTTPRequest::readBytes provides access to the request body.
+    // // It requires a buffer, the max buffer length and it will return
+    // // the amount of bytes that have been written to the buffer.
+    // size_t s = req->readBytes(buffer, 256);
+
+    // The response does not only implement the Print interface to
+    // write character data to the response but also the write function
+    // to write binary data to the response.
+    res->write(buffer, l);
+  }
+  res->println("");
+
+}
+
+void handleSend(HTTPRequest * req, HTTPResponse * res) {
+    // Serial.print(req->getRequestString());
+
   // Status code is 200 OK by default.
   // We want to deliver a simple HTML page, so we send a corresponding content type:
   res->setHeader("Content-Type", "text/html");
@@ -182,24 +218,25 @@ void handleDownload(HTTPRequest * req, HTTPResponse * res) {
 
 }
 
-void handleTimestamp(HTTPRequest * req, HTTPResponse * res) {
-  // Status code is 200 OK by default.
-  // We want to deliver a simple HTML page, so we send a corresponding content type:
-  res->setHeader("Content-Type", "text/html");
 
-  // The response implements the Print interface, so you can use it just like
-  // you would write to Serial etc.
-  res->println(normal_page);
+void begin_file(){
+    File file = SPIFFS.open("/data.csv", FILE_WRITE);
+  if(!file){
+    Serial.println("Error opening the file in WRITE mode");
+    return;
+  }
+  else
+  {
+    Serial.println("File successfully opened in WRITE mode");
+  }
 
-}
+  String dataFields = "Time, SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
 
-void handleLocation(HTTPRequest * req, HTTPResponse * res) {
-  // Status code is 200 OK by default.
-  // We want to deliver a simple HTML page, so we send a corresponding content type:
-  res->setHeader("Content-Type", "text/html");
+  if(file.println(dataFields))  // Write column labels to csv file
+  {
+    Serial.println("Data fields written to file");
+  }
 
-  // The response implements the Print interface, so you can use it just like
-  // you would write to Serial etc.
-  res->println(normal_page);
+  file.close();
 
 }
