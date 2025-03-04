@@ -41,12 +41,12 @@ String normal_page = " \
 <html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
 <body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
     <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
-    <a href=\"/send_data\"><button class=\"button button2\">Send timestamp and location</button></a></p> \
+    <button id=\"sendData\" onclick=\"sendData()\">Send time and location</button> \
     <p id=\"error-code\">Error code will display here</p></body> \
     <script> \
         var latitude = 999; \
         var longitude = 999; \
-        window.onload = function() { \
+        function sendData() { \
         if (navigator.geolocation) { \
             navigator.geolocation.getCurrentPosition((position) => {  \
               latitude = position.coords.latitude; \
@@ -81,6 +81,15 @@ switch(error.code) { \
             var day = deviceClock.getDate(); \
             var month = deviceClock.getMonth() + 1; \
             var year = deviceClock.getFullYear(); \
+             fetch(window.location.href + \"send_data?year=\" + year + \"&month=\" + month + \"&day=\" + day \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
+                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
+            method: \"GET\", \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
         } \ 
     </script> \
 </html> \
@@ -250,6 +259,26 @@ void handleDownload(HTTPRequest * req, HTTPResponse * res) {
 
 
 void handleSend(HTTPRequest * req, HTTPResponse * res) {
+  ResourceParameters * params = req->getParams();
+  std::string paramVal;
+  if (params->getQueryParameter("year", paramVal)){
+    Serial.println(String(paramVal.c_str()));
+  }
+  if (params->getQueryParameter("month", paramVal)){
+    Serial.println(String(paramVal.c_str()));
+  }
+  if (params->getQueryParameter("day", paramVal)){
+    Serial.println(String(paramVal.c_str()));
+  }
+  if (params->getQueryParameter("hour", paramVal)){
+    Serial.println(String(paramVal.c_str()));
+  }
+  if (params->getQueryParameter("minute", paramVal)){
+    Serial.println(String(paramVal.c_str()));
+  }
+  if (params->getQueryParameter("second", paramVal)){
+    Serial.println(String(paramVal.c_str()));
+  }
     // Serial.print(req->getRequestString());
 
   // Status code is 200 OK by default.
