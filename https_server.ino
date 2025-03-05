@@ -16,6 +16,16 @@
 
 const char* ssid = "ESP32-Access-Point";
 const char* password = "123456789";
+const int MEASUREMENT_INTERVAL = 5000;
+int year = 0;
+int month = 0;
+int day = 0;
+int hour = 0;
+int minute = 0;
+int second = 0;
+
+float latitude = 999.9;
+float longitude = 999.9;
 
 // Include certificate data (see note above)
 #include "cert.h"
@@ -167,6 +177,10 @@ void handleDownload(HTTPRequest * req, HTTPResponse * res);
 void handleDelete(HTTPRequest * req, HTTPResponse * res);
 void handleTimestamp(HTTPRequest * req, HTTPResponse * res);
 void handleLocation(HTTPRequest * req, HTTPResponse * res);
+void begin_file();
+void increment_time();
+void fake_measurement();
+void append_data_to_file(String data_string);
 
 void setup() {
   // For logging
@@ -199,14 +213,14 @@ void setup() {
     Serial.println("Server ready.");
   }
 }
-String fake_data = "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+String fake_data = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
 void loop() {
   // This call will let the server do its work
   secureServer.loop();
 
   // Other code would go here...
-  delay(2);
-  append_data_to_file(fake_data);
+  delay(MEASUREMENT_INTERVAL);
+  fake_measurement();
 }
 
 void handleRoot(HTTPRequest * req, HTTPResponse * res) {
@@ -262,24 +276,34 @@ void handleSend(HTTPRequest * req, HTTPResponse * res) {
   ResourceParameters * params = req->getParams();
   std::string paramVal;
   if (params->getQueryParameter("year", paramVal)){
-    Serial.println(String(paramVal.c_str()));
+    year = String(paramVal.c_str()).toInt();
+    Serial.println(year);
   }
   if (params->getQueryParameter("month", paramVal)){
-    Serial.println(String(paramVal.c_str()));
+    month = String(paramVal.c_str()).toInt();
+    Serial.println(month);
   }
   if (params->getQueryParameter("day", paramVal)){
-    Serial.println(String(paramVal.c_str()));
-  }
+day = String(paramVal.c_str()).toInt();
+    Serial.println(day);  }
   if (params->getQueryParameter("hour", paramVal)){
-    Serial.println(String(paramVal.c_str()));
-  }
+hour = String(paramVal.c_str()).toInt();
+    Serial.println(hour);  }
   if (params->getQueryParameter("minute", paramVal)){
-    Serial.println(String(paramVal.c_str()));
-  }
+minute = String(paramVal.c_str()).toInt();
+    Serial.println(minute);  }
   if (params->getQueryParameter("second", paramVal)){
-    Serial.println(String(paramVal.c_str()));
-  }
-    // Serial.print(req->getRequestString());
+second = String(paramVal.c_str()).toInt();
+    Serial.println(year);  }
+  if (params->getQueryParameter("latitude", paramVal)){
+    if (String(paramVal.c_str()).toFloat() != 999){
+  latitude = String(paramVal.c_str()).toFloat();
+    }
+    Serial.println(latitude);  }
+  if (params->getQueryParameter("longitude", paramVal)){
+if (String(paramVal.c_str()).toFloat() != 999){
+  longitude = String(paramVal.c_str()).toFloat();
+    }    Serial.println(longitude);    // Serial.print(req->getRequestString());
 
   // Status code is 200 OK by default.
   // We want to deliver a simple HTML page, so we send a corresponding content type:
@@ -290,7 +314,50 @@ void handleSend(HTTPRequest * req, HTTPResponse * res) {
   res->println(normal_page);
 
 }
+}
 
+
+void fake_measurement(){
+  // String fake_data = "";
+  // if (year){
+  //   fake_data = String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  // } else {
+  //   fake_data = ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  // }
+  increment_time();
+  // month, day, hour, minute, second all need 0 padding
+  String month_pad = (month < 10) ? "0" : "";
+  String day_pad = (day < 10) ? "0" : "";
+  String hour_pad = (hour < 10) ? "0" : "";
+  String minute_pad = (minute < 10) ? "0" : "";
+  String second_pad = (second < 10) ? "0" : "";
+
+  String fake_data = String(year) + "-" + month_pad + String(month) + "-" + day_pad + String(day) + " " + hour_pad + String(hour) + ":" + minute_pad + String(minute) + ":" + second_pad + String(second) + ", " + String(latitude) + ", " + String(longitude) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
+  append_data_to_file(fake_data);
+}
+
+
+void increment_time(){
+  int days_in_february = ((year % 400 == 0) || ((year % 4 == 0) && ((year % 100 != 0)))) ? 29 : 28;
+  int days_in_curr_month = (month == 1) ? 31 : (month == 2) ? days_in_february : (month == 3) ? 31 :
+                            (month == 4) ? 30 : (month == 5) ? 31 : (month == 6) ? 30 :
+                            (month == 7) ? 31 : (month == 8) ? 31 : (month == 9) ? 30 :
+                            (month == 10) ? 31 : (month == 11) ? 30 : 31;
+  int seconds_added = MEASUREMENT_INTERVAL / 1000;
+ // int seconds_added = 607000; // For testing correct rollover over long intervals
+  int minutes_added = int((second + seconds_added) / 60);
+  int hours_added = int((minute + minutes_added) / 60);
+  int days_added = int((hour + hours_added) / 24);
+  int months_added = int((day + days_added) / days_in_curr_month);
+  int years_added = int((month + months_added) / 12);
+
+  second = int((second + seconds_added) % 60);
+  minute = int((minute + minutes_added) % 60);
+  hour = int((hour + hours_added) % 24);
+  day = int((day + days_added) % days_in_curr_month);
+  month = int((month + months_added) % 12);
+  year = int((year + years_added));
+}
 
 void begin_file(){
     file = SPIFFS.open("/data.csv", FILE_WRITE);
@@ -303,7 +370,7 @@ void begin_file(){
     Serial.println("File successfully opened in WRITE mode");
   }
 
-  String dataFields = "Time, SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
+  String dataFields = "Time, Latitude, Longitude, SoilHumidity, TempSoil, Conductivity, PH, Nitrogen, Phosphorus, Potassium, Salinity, TotalDissolvedSolids, AirHum, Airpress, Airtemp, Co2, light";
 
   if(file.println(dataFields))  // Write column labels to csv file
   {
