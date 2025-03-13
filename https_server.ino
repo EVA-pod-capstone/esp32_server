@@ -14,19 +14,6 @@
  *  - 404 for everything else
  */
 
-const char* ssid = "ESP32-Access-Point";
-const char* password = "123456789";
-const int MEASUREMENT_INTERVAL = 5000;
-int year = 0;
-int month = 0;
-int day = 0;
-int hour = 0;
-int minute = 0;
-int second = 0;
-
-float latitude = 999.9;
-float longitude = 999.9;
-
 // Include certificate data (see note above)
 #include "cert.h"
 #include "private_key.h"
@@ -42,129 +29,93 @@ float longitude = 999.9;
 #include <HTTPRequest.hpp>
 #include <HTTPResponse.hpp>
 
-File file;
-
-String normal_page = " \
-<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
-<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
-    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
-    <button id=\"sendData\" onclick=\"sendData()\">Send time and location</button> \
-    <p id=\"error-code\">Error code will display here</p></body> \
-    <script> \
-        var latitude = 999; \
-        var longitude = 999; \
-        window.onload = function() { \
-        if (navigator.geolocation) { \
-            navigator.geolocation.getCurrentPosition((position) => {  \
-              latitude = position.coords.latitude; \
-              longitude = position.coords.longitude; \
-              console.log(latitude); \
-              console.log(longitude); \
-              }, (error) => {console.log(error); document.getElementById(\"error-code\").innerText = error.message; \
-switch(error.code) { \
-    case error.PERMISSION_DENIED: \
-      console.log(\"Permission denied\"); \
-      break; \
-    case error.POSITION_UNAVAILABLE: \
-      console.log(\"Position unavailable\"); \
-      break; \
-    case error.TIMEOUT: \
-      console.log(\"Location timeout\"); \
-      break; \
-    case error.UNKNOWN_ERROR: \
-      console.log(\"Unknown error\"); \
-      break; \
-  } \
-  }); \
-        } else { \
-            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
-            latitude = 999; \
-            longitude = 999; \
-        } };\
-        function sendData() { \
-            var deviceClock = new Date();\
-            var hour = deviceClock.getHours(); \
-            var minute = deviceClock.getMinutes(); \
-            var second = deviceClock.getSeconds(); \
-            var day = deviceClock.getDate(); \
-            var month = deviceClock.getMonth() + 1; \
-            var year = deviceClock.getFullYear(); \
-             fetch(window.location.href + \"send_data?year=\" + year + \"&month=\" + month + \"&day=\" + day \
-                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
-                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
-            method: \"GET\", \
-            headers: { \
-                \"Accept\": \"application/json\", \
-                \"Content-type\": \"application/json\" \
-            } \
-}); \
-        }; \ 
-    </script> \
-</html> \
-";
-
-String deleted_page = " \
-<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
-<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
-    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
-    <button id=\"sendData\" onclick=\"sendData()\">Send time and location</button> \
-    <p id=\"deleted-status\">Data deleted</p> \
-    <p id=\"error-code\">Error code will display here</p></body> \
-    <script> \
-        var latitude = 999; \
-        var longitude = 999; \
-        window.onload = function() { \
-        if (navigator.geolocation) { \
-            navigator.geolocation.getCurrentPosition((position) => {  \
-              latitude = position.coords.latitude; \
-              longitude = position.coords.longitude; \
-              console.log(latitude); \
-              console.log(longitude); \
-              }, (error) => {console.log(error); document.getElementById(\"error-code\").innerText = error.message; \
-switch(error.code) { \
-    case error.PERMISSION_DENIED: \
-      console.log(\"Permission denied\"); \
-      break; \
-    case error.POSITION_UNAVAILABLE: \
-      console.log(\"Position unavailable\"); \
-      break; \
-    case error.TIMEOUT: \
-      console.log(\"Location timeout\"); \
-      break; \
-    case error.UNKNOWN_ERROR: \
-      console.log(\"Unknown error\"); \
-      break; \
-  } \
-  }); \
-        } else { \
-            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
-            latitude = 999; \
-            longitude = 999; \
-        } };\
-        function sendData() { \
-            var deviceClock = new Date();\
-            var hour = deviceClock.getHours(); \
-            var minute = deviceClock.getMinutes(); \
-            var second = deviceClock.getSeconds(); \
-            var day = deviceClock.getDate(); \
-            var month = deviceClock.getMonth() + 1; \
-            var year = deviceClock.getFullYear(); \
-             fetch(window.location.href + \"send_data?year=\" + year + \"&month=\" + month + \"&day=\" + day \
-                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
-                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
-            method: \"GET\", \
-            headers: { \
-                \"Accept\": \"application/json\", \
-                \"Content-type\": \"application/json\" \
-            } \
-}); \
-        }; \ 
-    </script> \
-</html> \
-";
-
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
 using namespace httpsserver;
+
+const char* ssid = "ESP32-Access-Point";
+const char* password = "123456789";
+const int MEASUREMENT_INTERVAL = 5000;
+int year = 0;
+int month = 0;
+int day = 0;
+int hour = 0;
+int minute = 0;
+int second = 0;
+
+float latitude = 999.9;
+float longitude = 999.9;
+
+File file;
+
+String page_part1 = " \
+<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
+<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
+    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
+    <button id=\"sendLocation\" onclick=\"sendLocation()\">Send Location</button> \
+    <button id=\"sendTime\" onclick=\"sendTime()\">Send Time</button> \
+    <p id=\"error-code\">Error code will display here</p></body>";
+    
+String page_deleted_status = "<p id=\"deleted-status\">Data deleted</p>";
+
+String page_part2 = "<script> \
+        var latitude = 999; \
+        var longitude = 999; \
+        window.onload = function() { \
+        if (navigator.geolocation) { \
+            navigator.geolocation.getCurrentPosition((position) => {  \
+              latitude = position.coords.latitude; \
+              longitude = position.coords.longitude; \
+              console.log(latitude); \
+              console.log(longitude); \
+              }, (error) => {console.log(error); document.getElementById(\"error-code\").innerText = error.message; \
+switch(error.code) { \
+    case error.PERMISSION_DENIED: \
+      console.log(\"Permission denied\"); \
+      break; \
+    case error.POSITION_UNAVAILABLE: \
+      console.log(\"Position unavailable\"); \
+      break; \
+    case error.TIMEOUT: \
+      console.log(\"Location timeout\"); \
+      break; \
+    case error.UNKNOWN_ERROR: \
+      console.log(\"Unknown error\"); \
+      break; \
+  } \
+  }); \
+        } else { \
+            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
+            latitude = 999; \
+            longitude = 999; \
+        } };\ 
+        function sendLocation() { \
+             fetch(window.location.origin + \"/send_location?latitude=\" + latitude + \"&longitude=\" + longitude, { \
+            method: \"GET\", \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
+        }; \ 
+        function sendTime() { \
+            var deviceClock = new Date();\
+            var hour = deviceClock.getUTCHours(); \
+            var minute = deviceClock.getUTCMinutes(); \
+            var second = deviceClock.getUTCSeconds(); \
+            var day = deviceClock.getUTCDate(); \
+            var month = deviceClock.getUTCMonth() + 1; \
+            var year = deviceClock.getUTCFullYear(); \
+            fetch(window.location.origin + \"/send_time?year=\" + year + \"&month=\" + month + \"&day=\" + day \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second, { \
+            method: \"GET\", \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
+        }; \ 
+    </script> \
+</html>";
 
 // Create an SSL certificate object from the files included above
 SSLCert cert = SSLCert(
@@ -207,13 +158,17 @@ void setup() {
   ResourceNode * nodeRoot    = new ResourceNode("/", "GET", &handleRoot);
   ResourceNode * nodeDownload = new ResourceNode("/download", "GET", &handleDownload);
   ResourceNode * nodeDelete = new ResourceNode("/delete", "GET", &handleDelete);
-  ResourceNode * nodeSend = new ResourceNode("/send_data", "GET", &handleSend);
+  ResourceNode * nodeTimestamp = new ResourceNode("/send_time", "GET", &handleTimestamp);
+  ResourceNode * nodeLocation = new ResourceNode("/send_location", "GET", &handleLocation);
+
 
   // Add the nodes to the server
   secureServer.registerNode(nodeRoot);
   secureServer.registerNode(nodeDownload);
   secureServer.registerNode(nodeDelete);
-  secureServer.registerNode(nodeSend);
+  secureServer.registerNode(nodeTimestamp);
+  secureServer.registerNode(nodeLocation);
+
 
   Serial.println("Starting server...");
   secureServer.start();
@@ -238,7 +193,8 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
 
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
-  res->println(normal_page);
+  res->println(page_part1);
+  res->println(page_part2);
 
 }
 
@@ -249,10 +205,11 @@ void handleDelete(HTTPRequest * req, HTTPResponse * res) {
   begin_file();
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
-  res->println(deleted_page);
+  res->println(page_part1);
+  res->println(page_deleted_status);
+  res->println(page_part2);
 
 }
-
 
 void handleDownload(HTTPRequest * req, HTTPResponse * res) {
   Serial.print("got download request");
@@ -279,8 +236,7 @@ void handleDownload(HTTPRequest * req, HTTPResponse * res) {
   res->println("");
 }
 
-
-void handleSend(HTTPRequest * req, HTTPResponse * res) {
+void handleTimestamp(HTTPRequest * req, HTTPResponse * res){
   ResourceParameters * params = req->getParams();
   std::string paramVal;
   if (params->getQueryParameter("year", paramVal)){
@@ -292,26 +248,18 @@ void handleSend(HTTPRequest * req, HTTPResponse * res) {
     Serial.println(month);
   }
   if (params->getQueryParameter("day", paramVal)){
-day = String(paramVal.c_str()).toInt();
+    day = String(paramVal.c_str()).toInt();
     Serial.println(day);  }
   if (params->getQueryParameter("hour", paramVal)){
-hour = String(paramVal.c_str()).toInt();
+    hour = String(paramVal.c_str()).toInt();
     Serial.println(hour);  }
   if (params->getQueryParameter("minute", paramVal)){
-minute = String(paramVal.c_str()).toInt();
+    minute = String(paramVal.c_str()).toInt();
     Serial.println(minute);  }
   if (params->getQueryParameter("second", paramVal)){
-second = String(paramVal.c_str()).toInt();
-    Serial.println(year);  }
-  if (params->getQueryParameter("latitude", paramVal)){
-    if (String(paramVal.c_str()).toFloat() != 999){
-  latitude = String(paramVal.c_str()).toFloat();
-    }
-    Serial.println(latitude);  }
-  if (params->getQueryParameter("longitude", paramVal)){
-if (String(paramVal.c_str()).toFloat() != 999){
-  longitude = String(paramVal.c_str()).toFloat();
-    }    Serial.println(longitude);    // Serial.print(req->getRequestString());
+    second = String(paramVal.c_str()).toInt();
+    Serial.println(second);  
+  }
 
   // Status code is 200 OK by default.
   // We want to deliver a simple HTML page, so we send a corresponding content type:
@@ -319,19 +267,41 @@ if (String(paramVal.c_str()).toFloat() != 999){
 
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
-  res->println(normal_page);
-
+  res->println(page_part1);
+  res->println(page_part2);
 }
+
+
+void handleLocation(HTTPRequest * req, HTTPResponse * res) {
+  ResourceParameters * params = req->getParams();
+  std::string paramVal;
+  
+  if (params->getQueryParameter("latitude", paramVal)){
+    if (String(paramVal.c_str()).toFloat() != 999){
+      latitude = String(paramVal.c_str()).toFloat();
+    }
+    Serial.println(latitude);  
+  }
+  if (params->getQueryParameter("longitude", paramVal)){
+    if (String(paramVal.c_str()).toFloat() != 999){
+     longitude = String(paramVal.c_str()).toFloat();
+    }
+  Serial.println(longitude);   
+  }
+
+  // Status code is 200 OK by default.
+  // We want to deliver a simple HTML page, so we send a corresponding content type:
+  res->setHeader("Content-Type", "text/html");
+
+  // The response implements the Print interface, so you can use it just like
+  // you would write to Serial etc.
+  res->println(page_part1);
+  res->println(page_part2);
+
 }
 
 
 void fake_measurement(){
-  // String fake_data = "";
-  // if (year){
-  //   fake_data = String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
-  // } else {
-  //   fake_data = ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
-  // }
   increment_time();
   // month, day, hour, minute, second all need 0 padding
   String month_pad = (month < 10) ? "0" : "";
@@ -406,5 +376,4 @@ void append_data_to_file(String data_string){
   }
 
   file.close();
-
 }
