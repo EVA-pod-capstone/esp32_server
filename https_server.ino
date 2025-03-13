@@ -31,9 +31,6 @@ float longitude = 999.9;
 #include "cert.h"
 #include "private_key.h"
 
-// Binary data for the favicon
-#include "favicon.h"
-
 // We will use wifi
 #include <SPIFFS.h>
 #include <WiFi.h>
@@ -56,7 +53,7 @@ String normal_page = " \
     <script> \
         var latitude = 999; \
         var longitude = 999; \
-        function sendData() { \
+        window.onload = function() { \
         if (navigator.geolocation) { \
             navigator.geolocation.getCurrentPosition((position) => {  \
               latitude = position.coords.latitude; \
@@ -83,7 +80,8 @@ switch(error.code) { \
             console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
             latitude = 999; \
             longitude = 999; \
-        } \
+        } };\
+        function sendData() { \
             var deviceClock = new Date();\
             var hour = deviceClock.getHours(); \
             var minute = deviceClock.getMinutes(); \
@@ -100,7 +98,7 @@ switch(error.code) { \
                 \"Content-type\": \"application/json\" \
             } \
 }); \
-        } \ 
+        }; \ 
     </script> \
 </html> \
 ";
@@ -109,7 +107,7 @@ String deleted_page = " \
 <html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
 <body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
     <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
-    <a href=\"/send_data\"><button class=\"button button2\">Send timestamp and location</button></a></p> \
+    <button id=\"sendData\" onclick=\"sendData()\">Send time and location</button> \
     <p id=\"deleted-status\">Data deleted</p> \
     <p id=\"error-code\">Error code will display here</p></body> \
     <script> \
@@ -142,7 +140,8 @@ switch(error.code) { \
             console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
             latitude = 999; \
             longitude = 999; \
-        } \
+        } };\
+        function sendData() { \
             var deviceClock = new Date();\
             var hour = deviceClock.getHours(); \
             var minute = deviceClock.getMinutes(); \
@@ -150,7 +149,16 @@ switch(error.code) { \
             var day = deviceClock.getDate(); \
             var month = deviceClock.getMonth() + 1; \
             var year = deviceClock.getFullYear(); \
-        } \ 
+             fetch(window.location.href + \"send_data?year=\" + year + \"&month=\" + month + \"&day=\" + day \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second \
+                                      + \"&latitude=\" + latitude + \"&longitude=\" + longitude, { \
+            method: \"GET\", \
+            headers: { \
+                \"Accept\": \"application/json\", \
+                \"Content-type\": \"application/json\" \
+            } \
+}); \
+        }; \ 
     </script> \
 </html> \
 ";
