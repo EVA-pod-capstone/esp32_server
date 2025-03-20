@@ -50,11 +50,12 @@
 <body> 
 <h1>EVA Pod Control</h1>
 <p> <button id="sendTime" onclick="sendTime()" class="button">Send Time</button> 
-  <button id="sendLocation" onclick="sendLocation()" class="button">Send Location</button> </p>
+  <button id="sendLocation" onclick="sendLocation()" class="button">Send Location</button>
+  <!-- <button id="checkData" onclick="checkData()" class="button">Check EVA Pod Time and Location</button> </p> -->
 <p><a href="/download"><button id="download-button" class="button">Download Data</button></a> 
     <a href="/delete"><button id="delete-button" class="button">Delete Data</button></a> </p>
     <p class="status-message" id="status-message">Status Message:</p>
-        <!-- Delete confirmation, download request confirmation, repeat timestamp to user, repeat location to user,
+        <!-- Delete confirmation, repeat timestamp to user, repeat location to user,
      allow user to see geolocation API status, allow user to check location/time without sending anew -->
   <hr>
   <h4>Help</h4>
@@ -77,10 +78,10 @@
   stored time or location. If you wish to reset these data, press the button to update the corresponding value. 
 </p>
   </body>
-
 <script> 
         var latitude = 999; 
         var longitude = 999; 
+        var err_message = "";
         window.onload = function() { 
         if (navigator.geolocation) { 
             navigator.geolocation.getCurrentPosition((position) => {  
@@ -88,28 +89,18 @@
               longitude = position.coords.longitude; 
               console.log(latitude); 
               console.log(longitude); 
-              }, (error) => {console.log(error); document.getElementById("status-message").innerText = "Status Message: " + error.message; 
-switch(error.code) { 
-    case error.PERMISSION_DENIED: 
-      console.log("Permission denied"); 
-      break; 
-    case error.POSITION_UNAVAILABLE: 
-      console.log("Position unavailable"); 
-      break; 
-    case error.TIMEOUT: 
-      console.log("Location timeout"); 
-      break; 
-    case error.UNKNOWN_ERROR: 
-      console.log("Unknown error"); 
-      break; 
-  } 
-  }); 
+              }, (error) => {console.log(error); err_message = error.message; }); 
         } else { 
-            console.log("Geolocation is not supported by this browser. Setting both to 999..."); 
+            console.log("Geolocation is not supported by this browser."); 
             latitude = 999; 
             longitude = 999; 
-        } };
+        }};
         function sendLocation() { 
+          if (err_message != ""){
+          document.getElementById("status-message").innerText = "Status Message: " + err_message;
+          } else {
+            document.getElementById("status-message").innerText = "Status Message: Sending Location";
+          }
              fetch(window.location.origin + "/send_location?latitude=" + latitude + "&longitude=" + longitude, { 
             method: "GET", 
             headers: { 
