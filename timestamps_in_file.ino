@@ -273,25 +273,26 @@ void fake_measurement(){
   String fake_data = String(year) + "-" + month_pad + String(month) + "-" + day_pad + String(day) + " " + hour_pad + String(hour) + ":" + minute_pad + String(minute) + ":" + second_pad + String(second) + ", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14";
   append_data_to_file(fake_data);
 }
-
 void append_data_to_file(String data_string){
-    file = SPIFFS.open("/data.csv", FILE_APPEND);
-  if(!file){
-    Serial.println("Error opening the file in APPEND mode");
-    return;
-  }
-  else
-  {
-  //  Serial.println("File successfully opened in APPEND mode");
-  }
+  FSInfo fs_info;
+  SPIFFS.info(fs_info);
+  if ((fs_info.totalBytes - fs_info.usedBytes) > 255){ // each line should only take 83 bytes but we leave extra space
+      file = SPIFFS.open("/data.csv", FILE_APPEND);
+    if (!file) {
+      Serial.println("Error opening the file in APPEND mode");
+      return;
+    } else {
+      Serial.println("File successfully opened in APPEND mode");
+    }
 
-  if(file.println(data_string))  // Add new row to data file
-  {
-   // Serial.println("Data added to file");
-  }
-
-  file.close();
-
+    if(file.println(data_string))  // Add new row to data file
+    {
+      Serial.println("Data added to file");
+    }
+    file.close();
+    } else {
+      Serial.println('Cannot append to data file');
+    }
 }
 
 void begin_file(){
