@@ -102,7 +102,7 @@ String page_part1 = "<html><head><meta name=\"viewport\" content=\"width=device-
   <button id=\"sendLocation\" onclick=\"sendLocation()\" class=\"button\">Send Location</button> \
 <p><a href=\"/download\"><button id=\"download-button\" class=\"button\">Download Data</button></a> \
     <a href=\"/delete\"><button id=\"delete-button\" class=\"button\">Delete Data</button></a> </p>";
-    
+
 String page_status_message = "<p class=\"status-message\" id=\"status-message\">Status Message:</p>";
 
 String page_part2 = "<hr> \
@@ -247,6 +247,16 @@ void loop() {
 }
 
 void handleRoot(HTTPRequest * req, HTTPResponse * res) {
+  String month_pad = (month < 10) ? "0" : "";
+  String day_pad = (day < 10) ? "0" : "";
+  String hour_pad = (hour < 10) ? "0" : "";
+  String minute_pad = (minute < 10) ? "0" : "";
+  String second_pad = (second < 10) ? "0" : "";
+
+  String timestring = String(year) + "-" + month_pad + String(month) + "-" + day_pad + String(day) + " " + hour_pad + String(hour) + ":" + minute_pad + String(minute) + ":" + second_pad + String(second);
+
+  String page_last_meas_time = "<p class=\"status-message\" id=\"last_meas_time\">Last Measurement: " + timestring + "</p>";
+  String page_saved_location = "<p class=\"status-message\" id=\"status-message\">Latitude: " + latitude + ", Longitude: " + longitude + "</p>";
   // Status code is 200 OK by default.
   // We want to deliver a simple HTML page, so we send a corresponding content type:
   res->setHeader("Content-Type", "text/html");
@@ -255,6 +265,8 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
   // you would write to Serial etc.
   res->println(page_part1);
   res->println(page_status_message);
+  res->println(page_last_meas_time);
+  res->println(page_saved_location);
   res->println(page_part2);
 
 }
