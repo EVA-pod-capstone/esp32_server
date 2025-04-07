@@ -47,56 +47,116 @@ float longitude = 999.9;
 
 File file;
 
-String page_part1 = " \
-<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
-<body><p><a href=\"/download\"><button class=\"button button2\">Download</button></a> \
-    <a href=\"/delete\"><button class=\"button button2\">Delete</button></a></p> \
-    <button id=\"sendLocation\" onclick=\"sendLocation()\">Send Location</button> \
-    <button id=\"sendTime\" onclick=\"sendTime()\">Send Time</button> \
-    <p id=\"error-code\">Error code will display here</p></body>";
+String page_part1 = "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head> \
+<style> \
+  .button{ \
+    font-family:'Times New Roman', Times, serif; \
+    font-size: 20px; \
+    margin-left: 20px; \
+  } \
+  #download-button { \
+      background-color: aquamarine; \
+      border: 1px solid black; \
+  } \
+  #download-button:hover { \
+      background-color: rgb(106, 233, 224); \
+  } \
+  #download-button:active { \
+      background-color: rgb(40, 115, 189); \
+  } \
+  #delete-button { \
+      background-color: rgb(255, 61, 61); \
+      border: 1px solid black; \
+      color: white; \
+  } \
+  #delete-button:hover { \
+      background-color: rgb(213, 40, 40); \
+  } \
+  #delete-button:active { \
+      background-color: rgb(233, 111, 24); \
+  } \
+  #sendLocation, #sendTime{ \
+      background-color: rgb(255, 251, 195); \
+      border: 1px solid black;\
+      color: rgb(0, 0, 0);\
+  } \
+  #sendLocation:hover, #sendTime:hover{ \
+      background-color: rgb(250, 235, 134); \
+  } \
+  #sendLocation:active, #sendTime:active{ \
+      background-color: rgb(195, 233, 24); \
+  } \
+  .status-message{ \
+    font-family:'Times New Roman', Times, serif; \
+    font-size: 18px; \
+    margin-left: 20px; \
+  } \
+  h1{ \
+    background-color: rgb(164, 255, 154); \
+    margin: -8px; \
+  } \
+</style> \
+<body> \
+<h1>EVA Pod Control</h1> \
+<p> <button id=\"sendTime\" onclick=\"sendTime()\" class=\"button\">Send Time</button> \
+  <button id=\"sendLocation\" onclick=\"sendLocation()\" class=\"button\">Send Location</button> \
+<p><a href=\"/download\"><button id=\"download-button\" class=\"button\">Download Data</button></a> \
+    <a href=\"/delete\"><button id=\"delete-button\" class=\"button\">Delete Data</button></a> </p>";
     
-String page_deleted_status = "<p id=\"deleted-status\">Data deleted</p>";
+String page_status_message = "<p class=\"status-message\" id=\"status-message\">Status Message:</p>";
 
-String page_part2 = "<script> \
+String page_part2 = "<hr> \
+  <h4>Help</h4> \
+  <p>Send Time: When setting up the EVA Pod, be sure to connect an external device and hit the 'Send Time' button. \
+     When powered and running, the EVA Pod can keep time, but it needs to be provided a starting point. \
+     When you hit this button, the EVA Pod will grab your device's current time and count from there to assign date and time \
+     to all future measurements. Note that if it loses power or resets, it will lose time, so this step should be done again \
+     after changing the battery. \
+  </p> \
+  <p>Send Location: Optionally hit this button when setting up the EVA Pod to store latitude and longitude with the data. \
+    The EVA Pod has no internal GPS, but it can grab your device's GPS location if you allow it.  \
+    This will allow the EVA website to later grab your EVA Pod's location automatically from your data file. \
+    If the website cannot find location data in the file, it will ask you to enter it manually. \
+    (This step does not need to be done again until you decide to move your EVA Pod to a new location.) \
+ </p> \
+ <p>Download Data: Press this button to download the csv file storing the EVA Pod's data. This file can be uploaded \
+  directly to the EVA website or parsed and analyzed manually. \
+</p> \
+<p>Delete Data: Press this button to clear the contents of the csv file on the EVA Pod. This action cannot be undone. This does not clear the \
+  stored time or location. If you wish to reset these data, press the button to update the corresponding value. \
+</p> \
+  </body> \
+<script> \
         var latitude = 999; \
         var longitude = 999; \
+        var err_message = \"\"; \
         window.onload = function() { \
-        if (navigator.geolocation) { \
+        if (navigator.geolocation) {  \
             navigator.geolocation.getCurrentPosition((position) => {  \
               latitude = position.coords.latitude; \
-              longitude = position.coords.longitude; \
+              longitude = position.coords.longitude; \ 
               console.log(latitude); \
               console.log(longitude); \
-              }, (error) => {console.log(error); document.getElementById(\"error-code\").innerText = error.message; \
-switch(error.code) { \
-    case error.PERMISSION_DENIED: \
-      console.log(\"Permission denied\"); \
-      break; \
-    case error.POSITION_UNAVAILABLE: \
-      console.log(\"Position unavailable\"); \
-      break; \
-    case error.TIMEOUT: \
-      console.log(\"Location timeout\"); \
-      break; \
-    case error.UNKNOWN_ERROR: \
-      console.log(\"Unknown error\"); \
-      break; \
-  } \
-  }); \
+          }, (error) => {console.log(error); err_message = error.message; }); \ 
         } else { \
-            console.log(\"Geolocation is not supported by this browser. Setting both to 999...\"); \
+            console.log(\"Geolocation is not supported by this browser.\"); \
             latitude = 999; \
             longitude = 999; \
-        } };\ 
+        }}; \
         function sendLocation() { \
+                  if (err_message == \"\"){ \
+          document.getElementById(\"status-message\").innerText = \"Status Message: \" + err_message; \
+          } else { \
+            document.getElementById(\"status-message\").innerText = \"Status Message: Sending Location\"; \
+          } \
              fetch(window.location.origin + \"/send_location?latitude=\" + latitude + \"&longitude=\" + longitude, { \
-            method: \"GET\", \
+            method: \"GET\", \ 
             headers: { \
                 \"Accept\": \"application/json\", \
                 \"Content-type\": \"application/json\" \
             } \
 }); \
-        }; \ 
+        }; \
         function sendTime() { \
             var deviceClock = new Date();\
             var hour = deviceClock.getUTCHours(); \
@@ -106,15 +166,15 @@ switch(error.code) { \
             var month = deviceClock.getUTCMonth() + 1; \
             var year = deviceClock.getUTCFullYear(); \
             fetch(window.location.origin + \"/send_time?year=\" + year + \"&month=\" + month + \"&day=\" + day \
-                                      + \"&hour=\" + hour + \"&minute=\" + minute + \"&second=\" + second, { \
+                                      + \"&hour=\" + hour + \"&minute=\" + minute +\"&second=\" + second, { \
             method: \"GET\", \
             headers: { \
                 \"Accept\": \"application/json\", \
                 \"Content-type\": \"application/json\" \
             } \
 }); \
-        }; \ 
-    </script> \
+        }; \
+    </script> \ 
 </html>";
 
 // Create an SSL certificate object from the files included above
@@ -194,6 +254,7 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
   res->println(page_part1);
+  res->println(page_status_message);
   res->println(page_part2);
 
 }
@@ -206,7 +267,7 @@ void handleDelete(HTTPRequest * req, HTTPResponse * res) {
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
   res->println(page_part1);
-  res->println(page_deleted_status);
+  res->println("<p class=\"status-message\" id=\"status-message\">Status Message: Data deleted</p>");
   res->println(page_part2);
 
 }
@@ -268,6 +329,19 @@ void handleTimestamp(HTTPRequest * req, HTTPResponse * res){
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
   res->println(page_part1);
+  res->print("<p class=\"status-message\" id=\"status-message\">Status Message: Received timestamp </p>");
+  res->print(year);
+  res->print("-");
+  res->print(month);
+  res->print("-");
+  res->print(day);
+  res->print("T");
+  res->print(hour);
+  res->print(":");
+  res->print(minute);
+  res->print(":");
+  res->print(second);
+  res->println("</p>");
   res->println(page_part2);
 }
 
@@ -296,6 +370,11 @@ void handleLocation(HTTPRequest * req, HTTPResponse * res) {
   // The response implements the Print interface, so you can use it just like
   // you would write to Serial etc.
   res->println(page_part1);
+  res->print("<p class=\"status-message\" id=\"status-message\">Status Message: Received location </p>");
+  res->print(latitude);
+  res->print(", ");
+  res->print(longitude);
+  res->println("</p>");
   res->println(page_part2);
 
 }
@@ -360,20 +439,23 @@ void begin_file(){
 }
 
 void append_data_to_file(String data_string){
-    file = SPIFFS.open("/data.csv", FILE_APPEND);
-  if(!file){
-    Serial.println("Error opening the file in APPEND mode");
-    return;
-  }
-  else
-  {
-  //  Serial.println("File successfully opened in APPEND mode");
-  }
+  FSInfo fs_info;
+  SPIFFS.info(fs_info);
+  if ((fs_info.totalBytes - fs_info.usedBytes) > 255){ // each line should only take 83 bytes but we leave extra space
+      file = SPIFFS.open("/data.csv", FILE_APPEND);
+    if (!file) {
+      Serial.println("Error opening the file in APPEND mode");
+      return;
+    } else {
+      Serial.println("File successfully opened in APPEND mode");
+    }
 
-  if(file.println(data_string))  // Add new row to data file
-  {
-   // Serial.println("Data added to file");
-  }
-
-  file.close();
+    if(file.println(data_string))  // Add new row to data file
+    {
+      Serial.println("Data added to file");
+    }
+    file.close();
+    } else {
+      Serial.println('Cannot append to data file');
+    }
 }
