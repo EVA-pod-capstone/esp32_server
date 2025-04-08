@@ -256,7 +256,7 @@ void handleRoot(HTTPRequest * req, HTTPResponse * res) {
   String timestring = String(year) + "-" + month_pad + String(month) + "-" + day_pad + String(day) + " " + hour_pad + String(hour) + ":" + minute_pad + String(minute) + ":" + second_pad + String(second);
 
   String page_last_meas_time = "<p class=\"status-message\" id=\"last_meas_time\">Last Measurement: " + timestring + "</p>";
-  String page_saved_location = "<p class=\"status-message\" id=\"status-message\">Latitude: " + latitude + ", Longitude: " + longitude + "</p>";
+  String page_saved_location = "<p class=\"status-message\" id=\"status-message\">Latitude: " + String(latitude) + ", Longitude: " + String(longitude) + "</p>";
   // Status code is 200 OK by default.
   // We want to deliver a simple HTML page, so we send a corresponding content type:
   res->setHeader("Content-Type", "text/html");
@@ -451,9 +451,7 @@ void begin_file(){
 }
 
 void append_data_to_file(String data_string){
-  FSInfo fs_info;
-  SPIFFS.info(fs_info);
-  if ((fs_info.totalBytes - fs_info.usedBytes) > 255){ // each line should only take 83 bytes but we leave extra space
+  //if (((SPIFFS.totalBytes) - (SPIFFS.usedBytes)) > 255){ // each line should only take 83 bytes but we leave extra space
       file = SPIFFS.open("/data.csv", FILE_APPEND);
     if (!file) {
       Serial.println("Error opening the file in APPEND mode");
@@ -467,7 +465,7 @@ void append_data_to_file(String data_string){
       Serial.println("Data added to file");
     }
     file.close();
-    } else {
-      Serial.println('Cannot append to data file');
-    }
+   // } else {
+     // Serial.println('Cannot append to data file');
+   // }
 }
